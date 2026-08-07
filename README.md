@@ -1,5 +1,7 @@
 # 💎 Siliceo-Nexus
 
+![Siliceo-Nexus Banner](assets/banner.png)
+
 > **Universal Multimodal Inference Gateway & Task-Aware Routing Engine**  
 > High-performance, zero-hardcode LLM gateway written in Rust (`:8082`). Automatically routes requests to local GPU nodes or cloud providers based on task intent, model capabilities, and cost constraints.
 
