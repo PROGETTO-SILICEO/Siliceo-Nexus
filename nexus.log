@@ -1,0 +1,11 @@
+[2m2026-08-07T17:33:22.498199Z[0m [32m INFO[0m [2msiliceo_nexus[0m[2m:[0m 💎 Siliceo-Nexus starting...
+[2m2026-08-07T17:33:22.499300Z[0m [32m INFO[0m [2msiliceo_nexus::db[0m[2m:[0m 💾 SQLite connesso in WAL Mode (busy_timeout=5s)
+[2m2026-08-07T17:33:22.500652Z[0m [32m INFO[0m [2msiliceo_nexus[0m[2m:[0m    Loaded 3 providers into Siliceo-Nexus memory pool
+[2m2026-08-07T17:33:22.500669Z[0m [32m INFO[0m [2msiliceo_nexus[0m[2m:[0m    [P1] [local] beellama-tailscale-2070 -> Qwen3.5-4B-Q6_K.gguf (["chitchat", "fast", "local", "tool_supported"])
+[2m2026-08-07T17:33:22.500677Z[0m [32m INFO[0m [2msiliceo_nexus[0m[2m:[0m    [P2] [free] openrouter-free-pool -> openrouter/free-models (["coding", "reasoning", "cloud_free", "tool_supported"])
+[2m2026-08-07T17:33:22.500682Z[0m [32m INFO[0m [2msiliceo_nexus[0m[2m:[0m    [P3] [free] gemini-free-tier -> gemini-2.5-flash (["chitchat", "coding", "fast", "cloud_free", "tool_supported"])
+[2m2026-08-07T17:33:22.547659Z[0m [32m INFO[0m [2msiliceo_nexus[0m[2m:[0m 🌐 Siliceo-Nexus listening on http://0.0.0.0:8082
+[2m2026-08-07T17:33:27.249614Z[0m [32m INFO[0m [2msiliceo_nexus[0m[2m:[0m 📥 Incoming chat completions request (messages: 1)
+[2m2026-08-07T17:33:27.249657Z[0m [32m INFO[0m [2msiliceo_nexus::router[0m[2m:[0m 🎯 Intent classificato: 'chitchat' (requires_tools: false)
+[2m2026-08-07T17:33:27.249665Z[0m [32m INFO[0m [2msiliceo_nexus::router[0m[2m:[0m ✅ Selezionato provider 'beellama-tailscale-2070' (model: Qwen3.5-4B-Q6_K.gguf) per intent 'chitchat'
+[2m2026-08-07T17:33:27.255739Z[0m [31mERROR[0m [2msiliceo_nexus[0m[2m:[0m ❌ Provider 'beellama-tailscale-2070' failed: error sending request for url (http://100.98.20.76:8080/v1/chat/completions). Triggering failover...
