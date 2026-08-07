@@ -1,0 +1,104 @@
+# 💎 Siliceo-Nexus
+
+> **Universal Multimodal Inference Gateway & Task-Aware Routing Engine**  
+> High-performance, zero-hardcode LLM gateway written in Rust (`:8082`). Automatically routes requests to local GPU nodes or cloud providers based on task intent, model capabilities, and cost constraints.
+
+---
+
+## 🌟 Overview
+
+**Siliceo-Nexus** is a self-hosted, lightweight OpenAI-compatible Inference Gateway designed to decouple AI applications, autonomous agents, and IDE tools from single LLM vendors.
+
+It abstracts provider complexities by offering a single endpoint (`http://localhost:8082/v1/chat/completions`) that dynamically selects the best inference backend—whether it is a local GPU node running Ollama/vLLM or a pool of free/paid cloud API providers.
+
+---
+
+## ✨ Key Features
+
+- **⚡ Instant Intent Classification (< 1ms)**: Automatically categorizes incoming prompts into `chitchat`, `coding`, `reasoning`, or `tool_call` without adding latency.
+- **🏷️ Tag & Capability-Based Routing**: Zero hardcoded model names. Requests are routed dynamically based on capabilities (`coding`, `fast`, `local`, `tool_supported`).
+- **🛡️ Rate-Limit & Token-Bucket Protection**: Tracks Tokens-Per-Minute (TPM) in addition to Requests-Per-Minute (RPM). Automatically places failing or rate-limited keys into temporary cooldowns.
+- **💰 Free-Tier Aggregation & Cost Awareness**: Stacks multiple free-tier cloud API keys alongside local GPU resources to maximize throughput at zero cost ($0 USD).
+- **🎛️ Integrated Web Dashboard**: Single-Page Application served at `http://localhost:8082/` for live multi-key management (Free vs Paid), priority tuning, and hot-reloading without restarts.
+- **💾 SQLite WAL Engine**: Data persistence (`data/nexus.db`) configured with Write-Ahead Logging (`PRAGMA journal_mode=WAL`) and busy timeouts for high-throughput concurrent access.
+- **🌐 Multimodal Ready**: Standard API endpoints for Text, Image Generation, and Audio Speech/Transcription.
+
+---
+
+## 🏛️ System Architecture
+
+```
+┌────────────────────────────────┐
+│ CLIENT APPLICATIONS & AGENTS   │
+│ - Autonomous AI Agents         │
+│ - IDE Extensions / Claude Code │  HTTP OpenAI Standard
+│ - Web / Chat Interfaces        │───────────────────────┐
+└────────────────────────────────┘                       │
+                                                         ▼
+                                             💎 Siliceo-Nexus Gateway (:8082)
+                                             ├─► Intent Classifier (<1ms)
+                                             ├─► TPM & Cooldown Tracker
+                                             └─► Dynamic Tag Selector
+                                                         │
+         ┌───────────────────────────────────────────────┼───────────────────────────────────────────────┐
+         │                                               │                                               │
+         ▼                                               ▼                                               ▼
+┌─────────────────────────────────┐             ┌─────────────────────────────────┐             ┌─────────────────────────────────┐
+│ TIER 0: LOCAL GPU NODE          │             │ TIER 1: FREE-TIER CLOUD POOL    │             │ TIER 2: HEAVY REASONING (PAID)  │
+│ - Ollama / vLLM / llama.cpp     │             │ - Gemini Free Pool              │             │ - Claude 3.5 / DeepSeek R1      │
+│ - Low latencies, total privacy  │             │ - Groq / Cerebras / SambaNova   │             │ - Activated on-demand or for    │
+│ - GPU VRAM Semaphore protection │             │ - Auto-cooldown on 429 errors   │             │   explicit CRITICAL tasks       │
+└─────────────────────────────────┘             └─────────────────────────────────┘             └─────────────────────────────────┘
+```
+
+---
+
+## 🎛️ Web Control Dashboard (`http://localhost:8082/`)
+
+The integrated Web SPA provides complete governance over your inference infrastructure:
+
+1. **Multi-Key Management**: Pair multiple keys for the same provider (e.g. *Key 1: Free Tier* vs *Key 2: Paid Backup*).
+2. **Hot Reloading**: Add, update, or disable providers on the fly without stopping active client sessions.
+3. **Live Metrics**: Monitor token consumption, active cooldowns, and cost savings in real time.
+
+---
+
+## 📡 API Reference
+
+Siliceo-Nexus implements standard OpenAI API specifications:
+
+- `POST /v1/chat/completions` — Text generation, Chat, and Function Calling
+- `POST /v1/images/generations` — Image & Video generation pipeline
+- `POST /v1/audio/speech` — Text-to-Speech (TTS)
+- `GET /v1/models` — Active catalog of models available across all tiers
+- `GET /providers` — List configured providers and live health statuses
+- `POST /providers` — Register or update a provider dynamically
+
+---
+
+## 🛠️ Quick Start
+
+### Prerequisites
+- Rust (Cargo) 1.75+
+
+### Installation & Run
+
+```bash
+# 1. Clone repository
+git clone https://github.com/your-org/siliceo-nexus.git
+cd siliceo-nexus
+
+# 2. Build release binary
+cargo build --release
+
+# 3. Launch gateway
+./target/release/siliceo-nexus
+```
+
+Access the Web Control Panel at `http://localhost:8082/`.
+
+---
+
+## 📄 License
+
+Licensed under the [MIT License](LICENSE).

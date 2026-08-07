@@ -1,114 +1,104 @@
 # 💎 Siliceo-Nexus
 
-> **Universal Multimodal Inference Gateway & Task-Aware Mesh Engine**  
-> Microservizio standalone in Rust (`:8082`) per l'orchestrazione dinamica dell'inferenza (Testo, Immagini, Voce) per l'intero ecosistema Siliceo (Nova, Silicea, Poeta, HKStyle, OpenCode, IDE ed estensioni).
+> **Universal Multimodal Inference Gateway & Task-Aware Routing Engine**  
+> High-performance, zero-hardcode LLM gateway written in Rust (`:8082`). Automatically routes requests to local GPU nodes or cloud providers based on task intent, model capabilities, and cost constraints.
 
 ---
 
-## 🏛️ Cos'è Siliceo-Nexus
+## 🌟 Overview
 
-**Siliceo-Nexus** è l'infrastruttura d'inferenza unificata di rete. Agisce come punto di contatto unico (`http://localhost:8082/v1`) per qualsiasi programma o agente che necessita di chiamate LLM o multimodali, disaccoppiando l'intelligenza cognitivo-decisionale dal trasporto computazionale.
+**Siliceo-Nexus** is a self-hosted, lightweight OpenAI-compatible Inference Gateway designed to decouple AI applications, autonomous agents, and IDE tools from single LLM vendors.
 
-### Principi Architetturali Fondamentali
-
-1. **Zero Modelli Hardcoded**: Nessun nome di modello scritto nel codice compilato. Tutto è basato su **Capability & Tag dinamici** caricati da database SQLite (`data/nexus.db`).
-2. **Mesh Tailscale Native**: Connessione diretta col **`nodo-inferenza` (`100.98.20.76`)** via Tailscale per l'esecuzione su GPU RTX 2070 (beellama/Ollama `:8080`, ComfyUI `:8188`, Servizio Voce).
-3. **Free-Tier Aggregation Pool**: Aggregazione a rotazione e stacking di provider gratuiti (Gemini, Groq, Cerebras, SambaNova, OpenRouter Free) per abbattere i costi a **$0.00 USD**.
-4. **Controllo Utente Totale (Governance)**: Dashboard SPA su `http://localhost:8082/` per la gestione a caldo delle chiavi API (Free vs Paid), priorità e switch manuali.
+It abstracts provider complexities by offering a single endpoint (`http://localhost:8082/v1/chat/completions`) that dynamically selects the best inference backend—whether it is a local GPU node running Ollama/vLLM or a pool of free/paid cloud API providers.
 
 ---
 
-## 🗺️ Topologia della Rete Siliceo Mesh
+## ✨ Key Features
+
+- **⚡ Instant Intent Classification (< 1ms)**: Automatically categorizes incoming prompts into `chitchat`, `coding`, `reasoning`, or `tool_call` without adding latency.
+- **🏷️ Tag & Capability-Based Routing**: Zero hardcoded model names. Requests are routed dynamically based on capabilities (`coding`, `fast`, `local`, `tool_supported`).
+- **🛡️ Rate-Limit & Token-Bucket Protection**: Tracks Tokens-Per-Minute (TPM) in addition to Requests-Per-Minute (RPM). Automatically places failing or rate-limited keys into temporary cooldowns.
+- **💰 Free-Tier Aggregation & Cost Awareness**: Stacks multiple free-tier cloud API keys alongside local GPU resources to maximize throughput at zero cost ($0 USD).
+- **🎛️ Integrated Web Dashboard**: Single-Page Application served at `http://localhost:8082/` for live multi-key management (Free vs Paid), priority tuning, and hot-reloading without restarts.
+- **💾 SQLite WAL Engine**: Data persistence (`data/nexus.db`) configured with Write-Ahead Logging (`PRAGMA journal_mode=WAL`) and busy timeouts for high-throughput concurrent access.
+- **🌐 Multimodal Ready**: Standard API endpoints for Text, Image Generation, and Audio Speech/Transcription.
+
+---
+
+## 🏛️ System Architecture
 
 ```
-                                    ┌─────────────────────────────────────────────────────────────┐
-                                    │ NODO INFERENZA TAILSCALE (100.98.20.76 - RTX 2070)          │
-                                    │ ├─► beellama (:8080)   [Testo locale Qwen3.5/Coder 4B/9B]   │
-                                    │ ├─► ComfyUI  (:8188)   [Generazione Immagini & Workflow]    │
-                                    │ └─► Voce     (TTS/STT) [Sintesi Vocale & Trascrizione]       │
-                                    └─────────────────────────────────────────────────────────────┘
-                                                                 ▲
-                                                                 │ (Via Tailscale Mesh)
-┌────────────────────────────────┐                               │
-│ CLIENTS NETWORK SILICEO:       │   HTTP Standard OpenAI        │
-│ - Nova (Kernel v3 / v2)        │───────────────────────────────┼───► 💎 Siliceo-Nexus (:8082)
-│ - Silicea / Poeta / HkStyle    │   (Porta :8082)               │     (Centro Operativo 100.79.151.73)
-│ - OpenCode / Claude Code / IDE │                               │
-│ - Script Python / Extension WS │                               │
-└────────────────────────────────┘                               │
-                                                                 ▼
-                                    ┌─────────────────────────────────────────────────────────────┐
-                                    │ FREE-TIER STACKING POOL (Cloud $0 USD)                      │
-                                    │ - Gemini Free Keys Pool (15 RPM / TPM Tracking)             │
-                                    │ - Groq Free Pool (Llama 3.3 70B fast)                       │
-                                    │ - Cerebras Ultra-Fast / SambaNova / OpenRouter Free         │
-                                    └─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────┐
+│ CLIENT APPLICATIONS & AGENTS   │
+│ - Autonomous AI Agents         │
+│ - IDE Extensions / Claude Code │  HTTP OpenAI Standard
+│ - Web / Chat Interfaces        │───────────────────────┐
+└────────────────────────────────┘                       │
+                                                         ▼
+                                             💎 Siliceo-Nexus Gateway (:8082)
+                                             ├─► Intent Classifier (<1ms)
+                                             ├─► TPM & Cooldown Tracker
+                                             └─► Dynamic Tag Selector
+                                                         │
+         ┌───────────────────────────────────────────────┼───────────────────────────────────────────────┐
+         │                                               │                                               │
+         ▼                                               ▼                                               ▼
+┌─────────────────────────────────┐             ┌─────────────────────────────────┐             ┌─────────────────────────────────┐
+│ TIER 0: LOCAL GPU NODE          │             │ TIER 1: FREE-TIER CLOUD POOL    │             │ TIER 2: HEAVY REASONING (PAID)  │
+│ - Ollama / vLLM / llama.cpp     │             │ - Gemini Free Pool              │             │ - Claude 3.5 / DeepSeek R1      │
+│ - Low latencies, total privacy  │             │ - Groq / Cerebras / SambaNova   │             │ - Activated on-demand or for    │
+│ - GPU VRAM Semaphore protection │             │ - Auto-cooldown on 429 errors   │             │   explicit CRITICAL tasks       │
+└─────────────────────────────────┘             └─────────────────────────────────┘             └─────────────────────────────────┘
 ```
 
 ---
 
-## 🛡️ Guardrail di Resilienza Tecnica (Anti-Failure)
+## 🎛️ Web Control Dashboard (`http://localhost:8082/`)
 
-Per garantire la stabilità in produzione, Siliceo-Nexus implementa 5 guardrail nativi:
+The integrated Web SPA provides complete governance over your inference infrastructure:
 
-### 1. Token Bucket al Minuto (TPM Tracking)
-Oltre al conteggio delle richieste (RPM), Nexus traccia i **Token al Minuto (TPM)**. Se una chiave/provider raggiunge il tetto di token (es. 32.000 TPM su Gemini Free), la chiave viene messa in **cooldown preventivo** prima che scatti il ban `HTTP 429`.
-
-### 2. Tag `tool_supported: true` per Cicli ReAct
-I cicli cognitivi con Function Calling XML/JSON vengono instradati **esclusivamente** verso modelli e provider con tag `tool_supported: true`, impedendo a modelli free non addestrati di corrompere i cicli ReAct.
-
-### 3. VRAM Swap Warmup Timeout (25s) per la RTX 2070
-Quando il `nodo-inferenza` deve cambiare modello residente in VRAM (es. da chitchat a coder), Nexus estende il timeout a **25 secondi**, evitando il crash del client durante il caricamento del modello in GPU.
-
-### 4. Protezione Anti-Ban IP (Multi-Provider Stacking)
-Anziché abusare di più chiavi dello stesso provider sullo stesso IP, Nexus predilige il rotamento tra **provider diversi** (1 Gemini + 1 Groq + 1 Cerebras + 1 SambaNova), prevenendo il blocco anti-sybil degli account.
-
-### 5. SQLite WAL Mode Native
-La base dati `data/nexus.db` è configurata nativamente in **WAL Mode** (`PRAGMA journal_mode=WAL; busy_timeout=5000;`), garantendo letture ad altissima velocità durante gli inserimenti concorrenti e le sincronizzazioni del catalogo.
+1. **Multi-Key Management**: Pair multiple keys for the same provider (e.g. *Key 1: Free Tier* vs *Key 2: Paid Backup*).
+2. **Hot Reloading**: Add, update, or disable providers on the fly without stopping active client sessions.
+3. **Live Metrics**: Monitor token consumption, active cooldowns, and cost savings in real time.
 
 ---
 
-## 🧠 Smart Task Routing (Instradamento Dinamico per Contesto)
+## 📡 API Reference
 
-Nexus analizza al volo l'intento del messaggio senza aggiungere latenza:
+Siliceo-Nexus implements standard OpenAI API specifications:
 
-- **Tier Chitchat / Presenza**: Saluti, conversazione diretta (`< 80` chars, "ciao", "come va") ➔ Smistato su `beellama` locale (2070) o Gemini Flash Free. Latenza bassissima, costo $0.
-- **Tier Coding & Refactoring**: Snippet, file `.rs`, `.py`, traceback, keywords `fn`, `impl`, `def` ➔ Smistato su provider con tag `coding` (es. Qwen-Coder / DeepSeek v4).
-- **Tier Reasoning & Audit**: Piani architetturali, evaluazioni del Tribunale ➔ Smistato su provider con tag `reasoning` (es. DeepSeek R1 / Sonnet).
-
-Client Hints: `model: "auto:coder"`, `model: "auto:chat"`, `model: "auto:fast"`.
-
----
-
-## 🎛️ Dashboard di Controllo (`http://localhost:8082/`)
-
-Served direttamente dal binario Rust di Siliceo-Nexus:
-
-1. **Multi-Key Manager**: Gestisci chiavi **Free vs Paid** per lo stesso provider (es. usa la chiave Paid Gemini solo se il pool Free è esaurito o per task marcati `CRITICAL`).
-2. **Auto-Catalog Sync**: Visualizzazione del catalogo modelli con costi trasparenti per 1M token ($0.00 vs $0.15), context size e tag.
-3. **Live Token Economy**: Monitoraggio dei token e del risparmio economico generato dal Free-Tier Stacking.
-
----
-
-## 📡 API Surface (OpenAI Standard)
-
-- `POST /v1/chat/completions` — Testo, Chat & ReAct
-- `POST /v1/images/generations` — Immagini/Video (ComfyUI `:8188`)
-- `POST /v1/audio/speech` — Sintesi Vocale (TTS)
-- `GET /v1/models` — Catalogo modelli attivi nel Nexus
-- `GET/POST /providers` — Management API a caldo
+- `POST /v1/chat/completions` — Text generation, Chat, and Function Calling
+- `POST /v1/images/generations` — Image & Video generation pipeline
+- `POST /v1/audio/speech` — Text-to-Speech (TTS)
+- `GET /v1/models` — Active catalog of models available across all tiers
+- `GET /providers` — List configured providers and live health statuses
+- `POST /providers` — Register or update a provider dynamically
 
 ---
 
 ## 🛠️ Quick Start
 
+### Prerequisites
+- Rust (Cargo) 1.75+
+
+### Installation & Run
+
 ```bash
-cd Siliceo-Nexus
+# 1. Clone repository
+git clone https://github.com/your-org/siliceo-nexus.git
+cd siliceo-nexus
+
+# 2. Build release binary
 cargo build --release
+
+# 3. Launch gateway
 ./target/release/siliceo-nexus
-# Dashboard disponibile su http://localhost:8082/
 ```
+
+Access the Web Control Panel at `http://localhost:8082/`.
 
 ---
 
-*Siliceo-Nexus — Il Prisma dell'Inferenza Universale.* 💎
+## 📄 License
+
+Licensed under the [MIT License](LICENSE).
