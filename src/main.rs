@@ -380,6 +380,8 @@ pub struct FetchModelsPayload {
     pub base_url: String,
     pub api_key: Option<String>,
     pub provider_key: Option<String>,
+    pub provider_id: Option<i64>,
+    pub provider_name: Option<String>,
 }
 
 async fn handle_fetch_models(
@@ -393,6 +395,30 @@ async fn handle_fetch_models(
         return Err((StatusCode::BAD_REQUEST, "⚠️ SSRF Protection: Endpoint non valido o pericoloso.".to_string()));
     }
 
+    let mut effective_key = payload.api_key.clone();
+
+    if let Some(ref k) = effective_key {
+        if k.contains("...") || k.contains('•') || k.trim().is_empty() {
+            effective_key = None;
+        }
+    }
+
+    if effective_key.is_none() {
+        let list = state.providers.read().await;
+        if let Some(p_id) = payload.provider_id {
+            if let Some(p) = list.iter().find(|x| x.id == Some(p_id)) {
+                effective_key = p.api_key.clone();
+            }
+        }
+        if effective_key.is_none() {
+            if let Some(ref p_name) = payload.provider_name {
+                if let Some(p) = list.iter().find(|x| x.name == *p_name) {
+                    effective_key = p.api_key.clone();
+                }
+            }
+        }
+    }
+
     let mut url = payload.base_url.trim_end_matches('/').to_string();
     if !url.ends_with("/models") {
         if !url.ends_with("/v1") && !url.ends_with("/v1beta") && !url.ends_with("/openai") {
@@ -402,7 +428,7 @@ async fn handle_fetch_models(
     }
 
     let mut req = state.client.get(&url);
-    if let Some(key) = &payload.api_key {
+    if let Some(key) = &effective_key {
         let trimmed = key.trim();
         if !trimmed.is_empty() {
             req = req.header("Authorization", format!("Bearer {}", trimmed));

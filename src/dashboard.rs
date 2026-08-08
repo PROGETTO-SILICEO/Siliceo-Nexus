@@ -431,11 +431,20 @@ pub fn render_dashboard() -> Html<&'static str> {
             const modelSelect = document.getElementById('p-model-select');
             modelInput.placeholder = "🔍 Download modelli in corso dall'endpoint...";
 
+            const editId = document.getElementById('p-id').value;
+            const provName = document.getElementById('p-name').value;
+
             try {
                 const res = await fetch('/providers/fetch_models', {
                     method: 'POST',
                     headers: getAuthHeaders(),
-                    body: JSON.stringify({ base_url: baseUrl, api_key: apiKey || null, provider_key: provKey })
+                    body: JSON.stringify({
+                        base_url: baseUrl,
+                        api_key: apiKey || null,
+                        provider_key: provKey,
+                        provider_id: editId ? parseInt(editId) : null,
+                        provider_name: provName || null
+                    })
                 });
 
                 const data = await res.json();
