@@ -181,24 +181,19 @@ async fn handle_get_catalog(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let rows = sqlx::query(
         "SELECT provider_name, model_id, prompt_cost_per_1m, completion_cost_per_1m, context_length, is_free, capabilities, last_updated 
-         FROM models_catalog ORDER BY is_free DESC, provider_name ASC, prompt_cost_per_1m ASC LIMIT 1000"
+         FROM models_catalog ORDER BY is_free DESC, provider_name ASC, prompt_cost_per_1m ASC LIMIT 2000"
     )
     .fetch_all(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut catalog = Vec::new();
-    let mut openrouter_count = 0;
-    let mut google_count = 0;
+    let mut provider_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
     for row in rows {
         use sqlx::Row;
         let prov: String = row.get("provider_name");
-        if prov == "google_aistudio" {
-            google_count += 1;
-        } else {
-            openrouter_count += 1;
-        }
+        *provider_counts.entry(prov.clone()).or_insert(0) += 1;
 
         catalog.push(serde_json::json!({
             "provider_name": prov,
@@ -211,10 +206,26 @@ async fn handle_get_catalog(
         }));
     }
 
+    let mut providers_meta = Vec::new();
+    for (k, count) in &provider_counts {
+        let label = match k.as_str() {
+            "openrouter" => "🪐 OpenRouter",
+            "google_aistudio" => "♊ Google AI Studio",
+            "groq" => "⚡ Groq",
+            "anthropic" => "🧠 Anthropic",
+            _ => k.as_str(),
+        };
+        providers_meta.push(serde_json::json!({
+            "key": k,
+            "label": label,
+            "count": count
+        }));
+    }
+    providers_meta.sort_by_key(|p| p["key"].as_str().unwrap_or("").to_string());
+
     Ok(Json(serde_json::json!({
         "count": catalog.len(),
-        "openrouter_count": openrouter_count,
-        "google_count": google_count,
+        "catalog_providers": providers_meta,
         "catalog": catalog
     })))
 }
