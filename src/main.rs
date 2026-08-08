@@ -89,7 +89,10 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn handle_dashboard() -> impl IntoResponse {
-    dashboard::render_dashboard()
+    (
+        [(axum::http::header::CACHE_CONTROL, "no-cache, no-store, must-revalidate")],
+        dashboard::render_dashboard()
+    )
 }
 
 async fn handle_health() -> impl IntoResponse {
@@ -178,17 +181,27 @@ async fn handle_get_catalog(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let rows = sqlx::query(
         "SELECT provider_name, model_id, prompt_cost_per_1m, completion_cost_per_1m, context_length, is_free, capabilities, last_updated 
-         FROM models_catalog ORDER BY is_free DESC, prompt_cost_per_1m ASC LIMIT 200"
+         FROM models_catalog ORDER BY is_free DESC, provider_name ASC, prompt_cost_per_1m ASC LIMIT 1000"
     )
     .fetch_all(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let mut catalog = Vec::new();
+    let mut openrouter_count = 0;
+    let mut google_count = 0;
+
     for row in rows {
         use sqlx::Row;
+        let prov: String = row.get("provider_name");
+        if prov == "google_aistudio" {
+            google_count += 1;
+        } else {
+            openrouter_count += 1;
+        }
+
         catalog.push(serde_json::json!({
-            "provider_name": row.get::<String, _>("provider_name"),
+            "provider_name": prov,
             "model_id": row.get::<String, _>("model_id"),
             "prompt_cost_per_1m": row.get::<f64, _>("prompt_cost_per_1m"),
             "completion_cost_per_1m": row.get::<f64, _>("completion_cost_per_1m"),
@@ -198,7 +211,12 @@ async fn handle_get_catalog(
         }));
     }
 
-    Ok(Json(serde_json::json!({ "count": catalog.len(), "catalog": catalog })))
+    Ok(Json(serde_json::json!({
+        "count": catalog.len(),
+        "openrouter_count": openrouter_count,
+        "google_count": google_count,
+        "catalog": catalog
+    })))
 }
 
 async fn handle_sync_catalog(

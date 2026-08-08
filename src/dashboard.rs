@@ -367,7 +367,9 @@ pub fn render_dashboard() -> Html<&'static str> {
                 const res = await fetch('/catalog');
                 const data = await res.json();
                 fullCatalog = data.catalog || [];
-                document.getElementById('stat-models').innerText = data.count || fullCatalog.length;
+                const orCount = data.openrouter_count || fullCatalog.filter(m => m.provider_name === 'openrouter').length;
+                const googCount = data.google_count || fullCatalog.filter(m => m.provider_name === 'google_aistudio').length;
+                document.getElementById('stat-models').innerHTML = `${fullCatalog.length} <span style="font-size:0.75rem; font-weight:normal; color:var(--muted);">(🪐 ${orCount} | ♊ ${googCount})</span>`;
                 filterCatalog();
             } catch(e) {
                 console.error("Errore caricamento catalogo:", e);
