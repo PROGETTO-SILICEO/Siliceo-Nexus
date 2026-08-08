@@ -69,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/chat/completions", post(handle_chat_completions))
         // Management API
         .route("/providers", get(list_providers).post(create_provider))
+        .route("/providers/fetch_models", post(handle_fetch_models))
         .route("/providers/:id", delete(delete_provider))
         .route("/providers/:id/test", post(handle_test_provider))
         // Catalog API
@@ -210,9 +211,22 @@ async fn handle_get_catalog(
     for (k, count) in &provider_counts {
         let label = match k.as_str() {
             "openrouter" => "🪐 OpenRouter",
-            "google_aistudio" => "♊ Google AI Studio",
-            "groq" => "⚡ Groq",
-            "anthropic" => "🧠 Anthropic",
+            "google_aistudio" | "google" => "♊ Google AI Studio",
+            "groq" => "⚡ Groq Cloud",
+            "deepseek" => "🧠 DeepSeek",
+            "nvidia" => "🟢 NVIDIA NIM",
+            "alibaba" => "🐉 Alibaba Qwen",
+            "anthropic" => "🎨 Anthropic",
+            "openai" => "🤖 OpenAI",
+            "aws" => "☁️ AWS Bedrock",
+            "inception" => "🔥 Inception / Fireworks",
+            "agnes" => "🕊️ Agnes AI",
+            "mistral" => "🌪️ Mistral AI",
+            "together" => "🤝 Together AI",
+            "perplexity" => "🔍 Perplexity",
+            "cerebras" => "⚡ Cerebras",
+            "sambanova" => "🟧 SambaNova",
+            "ollama_local" => "🏠 Ollama Local",
             _ => k.as_str(),
         };
         providers_meta.push(serde_json::json!({
@@ -294,4 +308,84 @@ async fn handle_test_provider(
             })))
         }
     }
+}
+
+#[derive(serde::Deserialize)]
+pub struct FetchModelsPayload {
+    pub base_url: String,
+    pub api_key: Option<String>,
+    pub provider_key: Option<String>,
+}
+
+async fn handle_fetch_models(
+    State(state): State<AppState>,
+    Json(payload): Json<FetchModelsPayload>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let mut url = payload.base_url.trim_end_matches('/').to_string();
+    if !url.ends_with("/models") {
+        if !url.ends_with("/v1") && !url.ends_with("/v1beta") && !url.ends_with("/openai") {
+            url.push_str("/v1");
+        }
+        url.push_str("/models");
+    }
+
+    let mut req = state.client.get(&url);
+    if let Some(key) = &payload.api_key {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", trimmed));
+            req = req.header("api-key", trimmed);
+        }
+    }
+
+    let resp = req.timeout(std::time::Duration::from_secs(12)).send().await
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Impossibile connettersi all'endpoint {}: {}", url, e)))?;
+
+    if !resp.status().is_success() {
+        return Err((StatusCode::BAD_REQUEST, format!("Errore HTTP status {} dall'endpoint {}", resp.status(), url)));
+    }
+
+    let body: serde_json::Value = resp.json().await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Errore nel parsing JSON dei modelli da {}: {}", url, e)))?;
+
+    let mut model_ids = Vec::new();
+
+    if let Some(data) = body.get("data").and_then(|d| d.as_array()) {
+        for m in data {
+            if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
+                model_ids.push(id.to_string());
+            }
+        }
+    } else if let Some(models) = body.get("models").and_then(|m| m.as_array()) {
+        for m in models {
+            if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
+                let clean = name.trim_start_matches("models/").to_string();
+                model_ids.push(clean);
+            }
+        }
+    }
+
+    if model_ids.is_empty() {
+        return Err((StatusCode::NOT_FOUND, format!("Nessun modello estratto dalla risposta di {}", url)));
+    }
+
+    let prov_key = payload.provider_key.unwrap_or_else(|| "custom".to_string());
+    for m_id in &model_ids {
+        let _ = sqlx::query(
+            "INSERT OR REPLACE INTO models_catalog 
+             (provider_name, model_id, prompt_cost_per_1m, completion_cost_per_1m, context_length, is_free, capabilities, last_updated)
+             VALUES (?, ?, 0.0, 0.0, 131072, 1, '[\"text\", \"chat\"]', datetime('now'))"
+        )
+        .bind(&prov_key)
+        .bind(m_id)
+        .execute(&state.db)
+        .await;
+    }
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "endpoint_used": url,
+        "count": model_ids.len(),
+        "models": model_ids
+    })))
 }

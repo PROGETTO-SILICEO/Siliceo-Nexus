@@ -121,6 +121,29 @@ pub fn render_dashboard() -> Html<&'static str> {
                 <form id="provider-form" onsubmit="saveProvider(event)">
                     <input type="hidden" id="p-id">
                     <div class="form-group">
+                        <label style="color:var(--primary); font-weight:bold;">⚡ Seleziona Preset Provider (Compilazione Automatica)</label>
+                        <select id="p-preset" onchange="applyPresetProvider(this.value)" style="border-color:var(--primary);">
+                            <option value="">-- Scegli o inserisci manualmente --</option>
+                            <option value="groq">⚡ Groq Cloud (Ultra Fast Llama / Qwen)</option>
+                            <option value="google">♊ Google AI Studio (Gemini 2.5 Pro / Flash)</option>
+                            <option value="deepseek">🧠 DeepSeek (V3 / R1)</option>
+                            <option value="nvidia">🟢 NVIDIA NIM / Build</option>
+                            <option value="alibaba">🐉 Alibaba Cloud / Qwen (DashScope)</option>
+                            <option value="anthropic">🎨 Anthropic (Claude 3.5 Sonnet / Haiku)</option>
+                            <option value="openai">🤖 OpenAI (GPT-4o / o3-mini)</option>
+                            <option value="aws">☁️ AWS Bedrock / Mantle Proxy</option>
+                            <option value="inception">🔥 Inception / Fireworks AI</option>
+                            <option value="agnes">🕊️ Agnes AI (Local / Tailscale)</option>
+                            <option value="mistral">🌪️ Mistral AI</option>
+                            <option value="together">🤝 Together AI</option>
+                            <option value="perplexity">🔍 Perplexity AI</option>
+                            <option value="cerebras">⚡ Cerebras AI</option>
+                            <option value="sambanova">🟧 SambaNova Systems</option>
+                            <option value="openrouter">🪐 OpenRouter Network</option>
+                            <option value="ollama_local">🏠 Ollama Local (Node RTX 2070 / :8080)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label>Nome Provider</label>
                         <input type="text" id="p-name" placeholder="es. groq-free-pool" required>
                     </div>
@@ -130,11 +153,17 @@ pub fn render_dashboard() -> Html<&'static str> {
                     </div>
                     <div class="form-group">
                         <label>API Keys (Multi-Key Pool: separa con virgola)</label>
-                        <textarea id="p-key" rows="2" placeholder="KEY_1, KEY_2, KEY_3 (Multi-Key Round-Robin)"></textarea>
+                        <textarea id="p-key" rows="2" placeholder="KEY_1, KEY_2, KEY_3 (Incolla qui per auto-riconoscimento)" oninput="detectProviderFromKey(this.value)"></textarea>
                     </div>
                     <div class="form-group">
-                        <label>Modello Target</label>
-                        <input type="text" id="p-model" placeholder="qwen/qwen-2.5-coder-32b:free" required>
+                        <label style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>Modello Target</span>
+                            <button type="button" class="btn-secondary" style="padding:2px 8px; font-size:0.75rem; background:rgba(56,189,248,0.15); color:var(--primary); border:1px solid var(--primary);" onclick="fetchLiveModelsFromEndpoint()">🔍 Rileva Modelli dal Vivo</button>
+                        </label>
+                        <div style="display:flex; gap:6px; flex-direction:column; margin-top:4px;">
+                            <input type="text" id="p-model" placeholder="es. llama-3.3-70b-versatile o gemini-2.5-flash" required>
+                            <select id="p-model-select" style="display:none;" onchange="if(this.value){ document.getElementById('p-model').value = this.value; }"></select>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Tier di Costo</label>
@@ -207,6 +236,236 @@ pub fn render_dashboard() -> Html<&'static str> {
         let catalogProvidersMeta = [];
         let currentCatalogSource = 'all';
         let activeTabKey = 'providers';
+
+        const PRESETS = {
+            groq: {
+                key: "groq",
+                name: "groq-free-pool",
+                url: "https://api.groq.com/openai/v1",
+                tier: "free",
+                priority: 1,
+                tags: "fast, cloud_free, coding, chitchat",
+                default_model: "llama-3.3-70b-versatile"
+            },
+            google: {
+                key: "google",
+                name: "gemini-free-tier",
+                url: "https://generativelanguage.googleapis.com/v1beta/openai",
+                tier: "free",
+                priority: 1,
+                tags: "chitchat, coding, fast, cloud_free, tool_supported",
+                default_model: "gemini-2.5-flash"
+            },
+            deepseek: {
+                key: "deepseek",
+                name: "deepseek-official",
+                url: "https://api.deepseek.com/v1",
+                tier: "paid",
+                priority: 1,
+                tags: "coding, reasoning, deepseek_r1",
+                default_model: "deepseek-chat"
+            },
+            nvidia: {
+                key: "nvidia",
+                name: "nvidia-nim-build",
+                url: "https://integrate.api.nvidia.com/v1",
+                tier: "free",
+                priority: 2,
+                tags: "gpu_accelerated, coding, llama3",
+                default_model: "meta/llama-3.3-70b-instruct"
+            },
+            alibaba: {
+                key: "alibaba",
+                name: "alibaba-qwen-dashscope",
+                url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+                tier: "paid",
+                priority: 2,
+                tags: "qwen_2_5, coding, multi_language",
+                default_model: "qwen-max"
+            },
+            anthropic: {
+                key: "anthropic",
+                name: "anthropic-claude-api",
+                url: "https://api.anthropic.com/v1",
+                tier: "paid",
+                priority: 1,
+                tags: "claude_sonnet, coding, reasoning",
+                default_model: "claude-3-5-sonnet-20241022"
+            },
+            openai: {
+                key: "openai",
+                name: "openai-official",
+                url: "https://api.openai.com/v1",
+                tier: "paid",
+                priority: 2,
+                tags: "gpt4o, reasoning, o3_mini",
+                default_model: "gpt-4o-mini"
+            },
+            aws: {
+                key: "aws",
+                name: "aws-bedrock-mantle",
+                url: "http://localhost:3001/v1",
+                tier: "paid",
+                priority: 1,
+                tags: "aws_bedrock, proxy_mantle, enterprise",
+                default_model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+            },
+            inception: {
+                key: "inception",
+                name: "inception-fireworks",
+                url: "https://api.fireworks.ai/inference/v1",
+                tier: "paid",
+                priority: 2,
+                tags: "fireworks_ai, fast_inference, open_models",
+                default_model: "accounts/fireworks/models/deepseek-r1"
+            },
+            agnes: {
+                key: "agnes",
+                name: "agnes-ai-local",
+                url: "http://100.98.20.76:8080/v1",
+                tier: "local",
+                priority: 1,
+                tags: "agnes_ai, tailscale, local_node",
+                default_model: "agnes-coder-v1"
+            },
+            mistral: {
+                key: "mistral",
+                name: "mistral-official",
+                url: "https://api.mistral.ai/v1",
+                tier: "free",
+                priority: 2,
+                tags: "mistral_large, codestral, free_tier",
+                default_model: "codestral-latest"
+            },
+            together: {
+                key: "together",
+                name: "together-ai",
+                url: "https://api.together.xyz/v1",
+                tier: "paid",
+                priority: 2,
+                tags: "open_source_models, llama3_1, qwen2_5",
+                default_model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
+            },
+            perplexity: {
+                key: "perplexity",
+                name: "perplexity-sonar",
+                url: "https://api.perplexity.ai",
+                tier: "paid",
+                priority: 2,
+                tags: "search_grounded, sonar_pro, web_search",
+                default_model: "sonar-pro"
+            },
+            cerebras: {
+                key: "cerebras",
+                name: "cerebras-fast-ai",
+                url: "https://api.cerebras.ai/v1",
+                tier: "free",
+                priority: 1,
+                tags: "ultra_fast, wafer_scale, llama3_1",
+                default_model: "llama3.1-70b"
+            },
+            sambanova: {
+                key: "sambanova",
+                name: "sambanova-systems",
+                url: "https://api.sambanova.ai/v1",
+                tier: "free",
+                priority: 1,
+                tags: "sambanova_rdu, fast_llama, deepseek_r1",
+                default_model: "Meta-Llama-3.3-70B-Instruct"
+            },
+            openrouter: {
+                key: "openrouter",
+                name: "openrouter-free-pool",
+                url: "https://openrouter.ai/api/v1",
+                tier: "free",
+                priority: 2,
+                tags: "chitchat, coding, openrouter_pool",
+                default_model: "qwen/qwen-2.5-coder-32b:free"
+            },
+            ollama_local: {
+                key: "ollama_local",
+                name: "ollama-local-gpu",
+                url: "http://100.98.20.76:8080/v1",
+                tier: "local",
+                priority: 1,
+                tags: "rtx_2070, local_gpu, tailscale",
+                default_model: "qwen2.5-coder:32b"
+            }
+        };
+
+        function applyPresetProvider(presetKey) {
+            if (!presetKey || !PRESETS[presetKey]) return;
+            const p = PRESETS[presetKey];
+            document.getElementById('p-name').value = p.name;
+            document.getElementById('p-url').value = p.url;
+            document.getElementById('p-model').value = p.default_model;
+            document.getElementById('p-tier').value = p.tier;
+            document.getElementById('p-priority').value = p.priority;
+            document.getElementById('p-tags').value = p.tags;
+        }
+
+        function detectProviderFromKey(keyVal) {
+            if (!keyVal) return;
+            const trimmed = keyVal.trim();
+            let detectedPreset = null;
+
+            if (trimmed.startsWith('gsk_')) detectedPreset = 'groq';
+            else if (trimmed.startsWith('AIzaSy')) detectedPreset = 'google';
+            else if (trimmed.startsWith('sk-ant-')) detectedPreset = 'anthropic';
+            else if (trimmed.startsWith('nvapi-')) detectedPreset = 'nvidia';
+            else if (trimmed.startsWith('sk-proj-')) detectedPreset = 'openai';
+            else if (trimmed.startsWith('sk-or-')) detectedPreset = 'openrouter';
+            else if (trimmed.startsWith('pplx-')) detectedPreset = 'perplexity';
+            else if (trimmed.startsWith('csk-')) detectedPreset = 'cerebras';
+            else if (trimmed.startsWith('fw_')) detectedPreset = 'inception';
+
+            if (detectedPreset) {
+                document.getElementById('p-preset').value = detectedPreset;
+                applyPresetProvider(detectedPreset);
+            }
+        }
+
+        async function fetchLiveModelsFromEndpoint() {
+            const baseUrl = document.getElementById('p-url').value;
+            const apiKey = document.getElementById('p-key').value;
+            const presetVal = document.getElementById('p-preset').value;
+            const provKey = presetVal || 'custom';
+
+            if (!baseUrl) {
+                alert("⚠️ Inserisci prima l'Endpoint o seleziona un Preset Provider.");
+                return;
+            }
+
+            const modelInput = document.getElementById('p-model');
+            const modelSelect = document.getElementById('p-model-select');
+            modelInput.placeholder = "🔍 Download modelli in corso dall'endpoint...";
+
+            try {
+                const res = await fetch('/providers/fetch_models', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ base_url: baseUrl, api_key: apiKey || null, provider_key: provKey })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.models && data.models.length > 0) {
+                    modelSelect.innerHTML = '<option value="">-- Seleziona uno dei ' + data.models.length + ' modelli rilevati dal vivo --</option>';
+                    data.models.forEach(m => {
+                        modelSelect.innerHTML += `<option value="${m}">${m}</option>`;
+                    });
+                    modelSelect.style.display = 'block';
+                    modelInput.value = data.models[0];
+                    alert(`✅ Rilevati dal vivo ${data.models.length} modelli da '${data.endpoint_used}'!\n• Modelli sincronizzati nel Catalogo.`);
+                    loadCatalog();
+                } else {
+                    alert("⚠️ Errore rilevamento modelli: " + (data.error || "Nessun modello restituito dall'endpoint."));
+                    modelInput.placeholder = "qwen/qwen-2.5-coder-32b:free";
+                }
+            } catch(e) {
+                alert("⚠️ Errore di connessione all'endpoint: " + e);
+                modelInput.placeholder = "qwen/qwen-2.5-coder-32b:free";
+            }
+        }
 
         function renderDynamicTabs() {
             const container = document.getElementById('tabs-bar');
@@ -309,6 +568,8 @@ pub fn render_dashboard() -> Html<&'static str> {
         function resetForm() {
             document.getElementById('provider-form').reset();
             document.getElementById('p-id').value = '';
+            document.getElementById('p-preset').value = '';
+            document.getElementById('p-model-select').style.display = 'none';
             document.getElementById('form-title').innerText = '➕ Aggiungi Provider';
             document.getElementById('btn-save').innerText = 'Salva Provider nel Nexus';
             document.getElementById('btn-cancel').style.display = 'none';
@@ -433,9 +694,7 @@ pub fn render_dashboard() -> Html<&'static str> {
 
             filtered.slice(0, 200).forEach(m => {
                 const isFreeBadge = m.is_free ? '<span class="badge badge-free">FREE</span>' : '<span class="badge badge-paid">PAID</span>';
-                const sourceBadge = m.provider_name === 'google_aistudio'
-                    ? '<span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">♊ Google</span>'
-                    : '<span class="badge" style="background:rgba(129,140,248,0.2); color:#818cf8;">🪐 OpenRouter</span>';
+                const sourceBadge = `<span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">${m.provider_name}</span>`;
                 const ctx = (m.context_length / 1024).toFixed(0) + 'k';
                 tbody.innerHTML += `
                     <tr>
@@ -456,11 +715,12 @@ pub fn render_dashboard() -> Html<&'static str> {
         function useModelInForm(modelId, providerName) {
             switchTab('providers');
             document.getElementById('p-model').value = modelId;
-            if (providerName === 'google_aistudio') {
-                document.getElementById('p-name').value = 'gemini-free-tier';
-                document.getElementById('p-url').value = 'https://generativelanguage.googleapis.com/v1beta/openai';
-                document.getElementById('p-tier').value = 'free';
-                document.getElementById('p-tags').value = 'chitchat, coding, fast, cloud_free, tool_supported';
+            if (providerName === 'google_aistudio' || providerName === 'google') {
+                applyPresetProvider('google');
+                document.getElementById('p-model').value = modelId;
+            } else if (PRESETS[providerName]) {
+                applyPresetProvider(providerName);
+                document.getElementById('p-model').value = modelId;
             } else if (modelId.includes(':free')) {
                 document.getElementById('p-tier').value = 'free';
             }
