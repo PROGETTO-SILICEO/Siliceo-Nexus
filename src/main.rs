@@ -388,11 +388,13 @@ async fn handle_fetch_models(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     Json(payload): Json<FetchModelsPayload>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    verify_admin_auth(&headers)?;
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    if let Err((code, msg)) = verify_admin_auth(&headers) {
+        return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
+    }
 
     if !is_safe_endpoint_url(&payload.base_url) {
-        return Err((StatusCode::BAD_REQUEST, "⚠️ SSRF Protection: Endpoint non valido o pericoloso.".to_string()));
+        return Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({ "success": false, "error": "⚠️ SSRF Protection: Endpoint non valido o pericoloso." }))));
     }
 
     let mut effective_key = payload.api_key.clone();
@@ -437,14 +439,14 @@ async fn handle_fetch_models(
     }
 
     let resp = req.timeout(std::time::Duration::from_secs(12)).send().await
-        .map_err(|e| (StatusCode::BAD_REQUEST, redact_secrets(&format!("Impossibile connettersi all'endpoint {}: {}", url, e))))?;
+        .map_err(|e| (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "success": false, "error": redact_secrets(&format!("Impossibile connettersi all'endpoint {}: {}", url, e)) }))))?;
 
     if !resp.status().is_success() {
-        return Err((StatusCode::BAD_REQUEST, redact_secrets(&format!("Errore HTTP status {} dall'endpoint {}", resp.status(), url))));
+        return Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({ "success": false, "error": redact_secrets(&format!("Errore HTTP status {} dall'endpoint {}", resp.status(), url)) }))));
     }
 
     let body: serde_json::Value = resp.json().await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Errore nel parsing JSON dei modelli da {}: {}", url, e)))?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "error": format!("Errore nel parsing JSON dei modelli da {}: {}", url, e) }))))?;
 
     let mut model_ids = Vec::new();
 
@@ -464,7 +466,7 @@ async fn handle_fetch_models(
     }
 
     if model_ids.is_empty() {
-        return Err((StatusCode::NOT_FOUND, format!("Nessun modello estratto dalla risposta di {}", url)));
+        return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "success": false, "error": format!("Nessun modello estratto dalla risposta di {}", url) }))));
     }
 
     let prov_key = payload.provider_key.unwrap_or_else(|| "custom".to_string());
