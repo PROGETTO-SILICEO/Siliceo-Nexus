@@ -18,6 +18,10 @@ It abstracts provider complexities by offering a single endpoint (`http://localh
 ## ✨ Key Features
 
 - **⚡ Instant Intent Classification (< 1ms)**: Automatically categorizes incoming prompts into `chitchat`, `coding`, `reasoning`, or `tool_call` without adding latency.
+- **📈 Live Hardware & Gateway Telemetry (`GET /stats`)**: Real-time GPU load, system RAM utilization, and latency sparkline graphs polled live on the Web Dashboard.
+- **🔄 1-Click Model Hot-Swapping (`POST /providers/:id/set_model`)**: Dynamically switch the active target model for any local or cloud provider instantly with 1-click on the dashboard, zero service restarts required.
+- **🐝 `beellama-switcher` Zero-GC Rust Micro-Daemon**: Standalone 2MB micro-service for dedicated GPU inference nodes (RTX 2070 / TurboQuant / GGUF). Scans local GGUF directories, exposes `/v1/models`, and manages `llama-server` process hot-swapping on demand with <5MB RAM footprint.
+- **🎨 Native Anthropic Messages API (`/v1/messages`)**: Full compatibility with Claude Code CLI, Claude Desktop, and Anthropic SDKs alongside standard OpenAI API routes (`/v1/chat/completions`).
 - **🔒 Enterprise Security & Privacy**:
   - **Key Masking**: API keys are masked over the network (`gsk_...9a2f`). Raw plaintext keys are never returned in JSON.
   - **Cross-Platform Storage Security**: Enforces `0o600` permissions on Unix/Linux/macOS and isolated user ACLs on Windows.
@@ -30,8 +34,8 @@ It abstracts provider complexities by offering a single endpoint (`http://localh
 - **🔑 Multi-Key Round-Robin Rotation**: Supports comma-separated API key pools per provider. Automatically rotates keys and handles `429 Too Many Requests` without interrupting sessions.
 - **🏷️ Tag & Capability-Based Routing**: Zero hardcoded model names. Requests are routed dynamically based on capabilities (`coding`, `fast`, `local`, `tool_supported`).
 - **💰 Free-Tier Aggregation & Cost Awareness**: Stacks multiple free-tier cloud API keys alongside local GPU resources to maximize throughput at zero cost ($0 USD).
-- **🎛️ Integrated Web Dashboard**: Single-Page Application served at `http://localhost:8082/` for live multi-key management, priority tuning, and hot-reloading without restarts.
-- **💾 SQLite WAL Engine**: Data persistence (`data/nexus.db`) configured with Write-Ahead Logging (`PRAGMA journal_mode=WAL`) and busy timeouts for high-throughput concurrent access.
+- **🎛️ Integrated Web Dashboard**: Single-Page Application served at `http://localhost:8082/` for live multi-key management, priority tuning, hardware telemetry, and hot-reloading without restarts.
+- **💾 SQLite WAL Engine**: Data persistence (`data/nexus.db`) configured with Write-Ahead Logging (`PRAGMA journal_mode=WAL`), transactions, and busy timeouts for high-throughput concurrent access.
 
 ---
 
