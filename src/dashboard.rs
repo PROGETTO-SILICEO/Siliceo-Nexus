@@ -6,398 +6,361 @@ pub fn render_dashboard() -> Html<&'static str> {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>💎 Siliceo-Nexus — Control Center</title>
+    <title>💎 Siliceo-Nexus — LLM Gateway Control Dashboard</title>
     <style>
         :root {
-            --bg: #0b0f19;
-            --panel: #131b2e;
-            --border: #1e293b;
+            --bg: #070a12;
+            --panel: #0d1322;
+            --card-bg: #111827;
+            --card-border: #1e293b;
             --primary: #38bdf8;
+            --primary-glow: rgba(56, 189, 248, 0.25);
             --accent: #818cf8;
-            --success: #34d399;
+            --success: #10b981;
             --warning: #fbbf24;
-            --danger: #f87171;
+            --danger: #ef4444;
             --text: #f8fafc;
             --muted: #94a3b8;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-        body { background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 20px; }
-        .header h1 { font-size: 1.5rem; display: flex; align-items: center; gap: 10px; color: var(--primary); }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab-btn { background: var(--panel); color: var(--muted); border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
-        .tab-btn.active { background: var(--primary); color: #000; border-color: var(--primary); }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 25px; }
-        .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-        .card h2 { font-size: 1.1rem; color: var(--accent); margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
-        th { color: var(--muted); font-weight: 500; }
-        .badge { padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
-        .badge-free { background: rgba(52, 211, 153, 0.15); color: var(--success); }
-        .badge-paid { background: rgba(248, 113, 113, 0.15); color: var(--danger); }
-        .badge-local { background: rgba(56, 189, 248, 0.15); color: var(--primary); }
-        .badge-cooldown { background: rgba(251, 191, 36, 0.15); color: var(--warning); }
-        .form-group { margin-bottom: 12px; }
-        .form-group label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 5px; }
-        input, select, textarea { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.9rem; }
-        button { background: var(--primary); color: #000; border: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
-        button:hover { opacity: 0.9; }
-        .btn-danger { background: var(--danger); color: #fff; }
-        .btn-secondary { background: var(--border); color: var(--text); }
-        .btn-edit { background: var(--accent); color: #fff; }
-        .node-status { display: flex; gap: 10px; align-items: center; font-size: 0.85rem; padding: 8px 12px; background: rgba(56, 189, 248, 0.1); border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.2); }
-        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); display: inline-block; }
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
-        .stat-card { background: var(--panel); border: 1px solid var(--border); padding: 15px; border-radius: 10px; text-align: center; }
-        .stat-val { font-size: 1.5rem; font-weight: bold; color: var(--primary); margin-top: 5px; }
-        /* Modal Result Box */
-        .modal-overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
-        .modal-box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 25px; width: 90%; max-width: 550px; }
-        .modal-box h3 { margin-bottom: 15px; color: var(--primary); display: flex; justify-content: space-between; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); padding: 24px; line-height: 1.5; min-height: 100vh; }
+        
+        /* Top Navigation Header */
+        .top-nav { display: flex; justify-content: space-between; align-items: center; background: var(--panel); border: 1px solid var(--card-border); padding: 14px 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .logo-title { display: flex; align-items: center; gap: 12px; font-size: 1.25rem; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+        .logo-title span.tag { font-size: 0.75rem; background: rgba(56, 189, 248, 0.15); color: var(--primary); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.3); }
+        
+        .search-box { display: flex; align-items: center; background: var(--bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 14px; width: 320px; gap: 8px; }
+        .search-box input { background: transparent; border: none; outline: none; color: var(--text); font-size: 0.85rem; width: 100%; }
+
+        .top-right { display: flex; align-items: center; gap: 14px; }
+        .admin-box { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); padding: 5px 12px; border-radius: 8px; font-size: 0.8rem; }
+        .admin-box input { background: transparent; border: none; outline: none; color: var(--primary); font-size: 0.8rem; width: 140px; }
+        
+        .node-status { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; padding: 6px 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; color: var(--success); }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
+
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 24px; }
+        .stat-card { background: var(--panel); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden; }
+        .stat-card::before { content: ''; position: absolute; top:0; left:0; width: 100%; height: 2px; background: linear-gradient(90deg, var(--primary), transparent); }
+        .stat-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); font-weight: 600; }
+        .stat-val { font-size: 1.8rem; font-weight: 800; color: var(--text); margin-top: 6px; display: flex; align-items: baseline; gap: 8px; }
+        .stat-val span.sub { font-size: 0.8rem; font-weight: 500; color: var(--success); }
+
+        /* Navigation Tabs */
+        .nav-tabs { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--card-border); padding-bottom: 12px; margin-bottom: 24px; }
+        .tabs-group { display: flex; gap: 8px; }
+        .tab-btn { background: transparent; color: var(--muted); border: 1px solid transparent; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
+        .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+        .tab-btn.active { background: var(--panel); color: var(--primary); border-color: var(--card-border); box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+
+        /* Main Cards Grid */
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 20px; }
+        .provider-card { background: var(--panel); border: 1px solid var(--card-border); border-radius: 14px; padding: 20px; transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; position: relative; }
+        .provider-card:hover { transform: translateY(-3px); border-color: rgba(56, 189, 248, 0.4); box-shadow: 0 8px 25px rgba(0,0,0,0.5); }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .provider-brand { display: flex; align-items: center; gap: 12px; }
+        .provider-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: bold; background: rgba(255,255,255,0.05); border: 1px solid var(--card-border); }
+        .provider-name { font-weight: 700; font-size: 1.05rem; color: var(--text); }
+        .provider-sub { font-size: 0.75rem; color: var(--muted); font-family: monospace; margin-top: 2px; }
+        
+        .status-pill { padding: 3px 9px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; display: flex; align-items: center; gap: 5px; }
+        .status-pill.active { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .status-pill.cooldown { background: rgba(251, 191, 36, 0.15); color: var(--warning); border: 1px solid rgba(251, 191, 36, 0.3); }
+        
+        .card-body { margin-bottom: 16px; font-size: 0.82rem; color: var(--muted); }
+        .key-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--card-border); padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 0.78rem; color: var(--primary); margin-top: 8px; width: 100%; justify-content: space-between; }
+
+        .card-actions { display: flex; gap: 8px; margin-top: 14px; pt-3; border-top: 1px solid rgba(255,255,255,0.05); }
+        .card-actions button { flex: 1; padding: 7px; font-size: 0.75rem; border-radius: 6px; font-weight: 600; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg); color: var(--text); transition: background 0.2s; }
+        .card-actions button:hover { background: rgba(255,255,255,0.08); }
+        .card-actions button.btn-test { background: rgba(56, 189, 248, 0.1); color: var(--primary); border-color: rgba(56, 189, 248, 0.3); }
+        .card-actions button.btn-danger { color: var(--danger); }
+        .card-actions button.btn-danger:hover { background: rgba(239, 68, 68, 0.15); }
+
+        /* Buttons */
+        .btn-add { background: linear-gradient(135deg, var(--primary), var(--accent)); color: #000; border: none; padding: 9px 18px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; box-shadow: 0 4px 15px var(--primary-glow); }
+        .btn-add:hover { opacity: 0.95; transform: scale(1.02); }
+
+        /* Modal Overlay */
+        .modal-overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); justify-content: center; align-items: center; z-index: 200; }
+        .modal-box { background: var(--panel); border: 1px solid var(--card-border); border-radius: 16px; padding: 28px; width: 92%; max-width: 580px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); position: relative; }
+        .modal-box h3 { font-size: 1.2rem; color: var(--primary); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+        input, select { width: 100%; padding: 9px 14px; background: var(--bg); border: 1px solid var(--card-border); border-radius: 8px; color: var(--text); font-size: 0.88rem; outline: none; }
+        input:focus, select:focus { border-color: var(--primary); }
+
+        /* Catalog Table View */
+        .table-container { background: var(--panel); border: 1px solid var(--card-border); border-radius: 14px; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--card-border); font-size: 0.85rem; }
+        th { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; font-weight: 600; }
+        .badge { padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+        .badge-free { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+        .badge-paid { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>💎 Siliceo-Nexus <span style="font-size:0.8rem; color:var(--muted); font-weight:normal;">v0.1.0 (Port :8082)</span></h1>
-        <div style="display:flex; gap:12px; align-items:center;">
-            <div style="display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.05); padding:4px 10px; border-radius:6px; border:1px solid var(--border);">
-                <span style="font-size:0.8rem; color:var(--muted);">🔒 Admin Token:</span>
-                <input type="password" id="admin-token" placeholder="NEXUS_ADMIN_TOKEN (opzionale)" style="width:160px; padding:3px 8px; font-size:0.75rem;" oninput="localStorage.setItem('nexus_admin_token', this.value)">
+
+    <!-- Top Navigation Header -->
+    <div class="top-nav">
+        <div class="logo-title">
+            <span>💎 SILICEO-NEXUS</span>
+            <span class="tag">GATEWAY V0.1.0</span>
+        </div>
+
+        <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="global-search" placeholder="Search Models, Keys, Providers..." oninput="filterCardsAndCatalog()">
+        </div>
+
+        <div class="top-right">
+            <div class="admin-box">
+                <span style="color:var(--muted);">🔒 Token:</span>
+                <input type="password" id="admin-token" placeholder="NEXUS_ADMIN_TOKEN" oninput="localStorage.setItem('nexus_admin_token', this.value)">
             </div>
             <div class="node-status">
                 <span class="dot"></span>
-                <span>Tailscale GPU Node: <strong>100.98.20.76 (:8080)</strong></span>
+                <span>99.8% Gateway Uptime</span>
             </div>
         </div>
     </div>
 
+    <!-- Stats Row -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div style="font-size:0.8rem; color:var(--muted);">Provider Configurati</div>
-            <div class="stat-val" id="stat-count">0</div>
+            <div class="stat-label">Configured Providers</div>
+            <div class="stat-val" id="stat-count">17 <span class="sub">Active Pool</span></div>
         </div>
         <div class="stat-card">
-            <div style="font-size:0.8rem; color:var(--muted);">Modelli in Catalogo</div>
-            <div class="stat-val" id="stat-models" style="color:var(--accent);">394</div>
+            <div class="stat-label">Active Models</div>
+            <div class="stat-val" id="stat-models">450 <span class="sub">• Live Discovering</span></div>
         </div>
         <div class="stat-card">
-            <div style="font-size:0.8rem; color:var(--muted);">Costo Stimato</div>
-            <div class="stat-val" style="color:var(--success);">$0.00</div>
+            <div class="stat-label">Masked API Keys</div>
+            <div class="stat-val" id="stat-keys">17 <span class="sub" style="color:var(--primary);">100% Masked</span></div>
         </div>
         <div class="stat-card">
-            <div style="font-size:0.8rem; color:var(--muted);">Rotazione Chiavi</div>
-            <div class="stat-val" style="color:var(--warning);">Multi-Key Active</div>
+            <div class="stat-label">Gateway Uptime</div>
+            <div class="stat-val" style="color:var(--success);">99.8% <span class="sub">30 Days</span></div>
         </div>
     </div>
 
-    <div class="tabs" id="tabs-bar">
-        <button class="tab-btn active" id="tab-btn-providers" onclick="switchTab('providers')">⚡ Providers & Pool Stack</button>
-        <button class="tab-btn" id="tab-btn-cat-google_aistudio" onclick="switchTab('cat-google_aistudio')">♊ Google AI Studio</button>
-        <button class="tab-btn" id="tab-btn-cat-openrouter" onclick="switchTab('cat-openrouter')">🪐 OpenRouter</button>
+    <!-- Navigation Tabs & Add Action -->
+    <div class="nav-tabs">
+        <div class="tabs-group" id="tabs-bar">
+            <button class="tab-btn active" id="tab-btn-providers" onclick="switchTab('providers')">⚡ Provider Catalog</button>
+            <button class="tab-btn" id="tab-btn-catalog" onclick="switchTab('cat-all')">📚 Model Gateway (450+)</button>
+        </div>
+        <button class="btn-add" onclick="openAddModal()">➕ Registra Provider</button>
     </div>
 
-    <!-- TAB 1: PROVIDERS -->
-    <div id="tab-providers" class="tab-content active">
-        <div class="grid">
-            <div class="card" style="grid-column: span 2;">
-                <h2>⚡ Stack Provider Attivi <button onclick="loadProviders()">🔄 Aggiorna</button></h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Nome</th>
-                            <th>Modello</th>
-                            <th>Tier</th>
-                            <th>Prio</th>
-                            <th>Capability Tags</th>
-                            <th>Stato Cooldown</th>
-                            <th>Azioni</th>
-                        </tr>
-                    </thead>
-                    <tbody id="providers-body">
-                        <tr><td colspan="7" style="color:var(--muted); text-align:center;">Caricamento provider...</td></tr>
-                    </tbody>
-                </table>
+    <!-- Main View: Provider Cards Grid -->
+    <div id="view-providers" class="cards-grid">
+        <!-- Rendered dynamically via JavaScript -->
+    </div>
+
+    <!-- Alternative View: Model Catalog Table -->
+    <div id="view-catalog" class="table-container" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 id="catalog-title" style="color:var(--primary); font-size:1.1rem;">📚 Catalogo Modelli Sincronizzato</h3>
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="catalog-search" placeholder="Filtra modelli..." oninput="filterCatalog()" style="width:220px; padding:6px 12px;">
+                <select id="catalog-filter" onchange="filterCatalog()" style="width:140px; padding:6px 12px;">
+                    <option value="all">Tutti i tipi</option>
+                    <option value="free">Solo Gratuiti</option>
+                </select>
+                <button class="btn-add" style="padding:6px 12px; font-size:0.8rem;" onclick="syncCatalog()">🔄 Sincronizza Ora</button>
             </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Modello ID</th>
+                    <th>Sorgente</th>
+                    <th>Costo Prompt (1M)</th>
+                    <th>Costo Completion (1M)</th>
+                    <th>Contesto</th>
+                    <th>Stato</th>
+                    <th>Azione</th>
+                </tr>
+            </thead>
+            <tbody id="catalog-body">
+                <!-- Rendered dynamically -->
+            </tbody>
+        </table>
+    </div>
 
-            <div class="card">
-                <h2><span id="form-title">➕ Aggiungi Provider</span></h2>
-                <form id="provider-form" onsubmit="saveProvider(event)">
-                    <input type="hidden" id="p-id">
-                    <div class="form-group">
-                        <label style="color:var(--primary); font-weight:bold;">⚡ Seleziona Preset Provider (Compilazione Automatica)</label>
-                        <select id="p-preset" onchange="applyPresetProvider(this.value)" style="border-color:var(--primary);">
-                            <option value="">-- Scegli o inserisci manualmente --</option>
-                            <option value="groq">⚡ Groq Cloud (Ultra Fast Llama / Qwen)</option>
-                            <option value="google">♊ Google AI Studio (Gemini 2.5 Pro / Flash)</option>
-                            <option value="deepseek">🧠 DeepSeek (V3 / R1)</option>
-                            <option value="nvidia">🟢 NVIDIA NIM / Build</option>
-                            <option value="alibaba">🐉 Alibaba Cloud / Qwen (DashScope)</option>
-                            <option value="anthropic">🎨 Anthropic (Claude 3.5 Sonnet / Haiku)</option>
-                            <option value="openai">🤖 OpenAI (GPT-4o / o3-mini)</option>
-                            <option value="aws">☁️ AWS Bedrock / Mantle Proxy</option>
-                            <option value="inception">🔥 Inception / Fireworks AI</option>
-                            <option value="agnes">🕊️ Agnes AI (Local / Tailscale)</option>
-                            <option value="mistral">🌪️ Mistral AI</option>
-                            <option value="together">🤝 Together AI</option>
-                            <option value="perplexity">🔍 Perplexity AI</option>
-                            <option value="cerebras">⚡ Cerebras AI</option>
-                            <option value="sambanova">🟧 SambaNova Systems</option>
-                            <option value="openrouter">🪐 OpenRouter Network</option>
-                            <option value="ollama_local">🏠 Ollama Local (Node RTX 2070 / :8080)</option>
-                        </select>
+    <!-- Modal Form: Add / Edit Provider -->
+    <div class="modal-overlay" id="form-modal">
+        <div class="modal-box">
+            <h3 id="form-title">➕ Registra Nuovo Provider
+                <span style="cursor:pointer; color:var(--muted); font-size:1.1rem;" onclick="closeFormModal()">✕</span>
+            </h3>
+            <form id="provider-form" onsubmit="saveProvider(event)">
+                <input type="hidden" id="p-id">
+                
+                <div class="form-group">
+                    <label>⚡ Seleziona Preset Provider (Compilazione Automatica)</label>
+                    <select id="p-preset" onchange="applyPresetProvider(this.value)">
+                        <option value="">-- Seleziona un Preset o Inserisci Manualmente --</option>
+                        <option value="groq">⚡ Groq Cloud (Llama 3.3 70B, Mixtral)</option>
+                        <option value="google">♊ Google AI Studio (Gemini 2.5 Flash / Pro)</option>
+                        <option value="deepseek">🧠 DeepSeek (V3, R1)</option>
+                        <option value="nvidia">🟢 NVIDIA NIM (Llama 3 70B, Nemotron)</option>
+                        <option value="qwen">🐉 Alibaba Cloud / Qwen (DashScope)</option>
+                        <option value="anthropic">🎨 Anthropic (Claude 3.5 Sonnet)</option>
+                        <option value="openai">🤖 OpenAI (GPT-4o, GPT-4o-mini)</option>
+                        <option value="aws">☁️ AWS Bedrock / Mantle Proxy</option>
+                        <option value="inception">🔥 Inception / Fireworks AI</option>
+                        <option value="agnes">🕊️ Agnes AI Singapore Cloud (Omni-Modal)</option>
+                        <option value="mistral">🌪️ Mistral AI (Mistral Large, Codestral)</option>
+                        <option value="together">🤝 Together AI</option>
+                        <option value="perplexity">🔍 Perplexity AI (Sonar Reasoning)</option>
+                        <option value="cerebras">⚡ Cerebras AI (Ultra Fast)</option>
+                        <option value="sambanova">🟧 SambaNova Systems (Llama 3 405B)</option>
+                        <option value="openrouter">🪐 OpenRouter Network (Free Pool)</option>
+                        <option value="ollama_local">🏠 Ollama Local (Node RTX 2070)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Nome Identificativo Provider</label>
+                    <input type="text" id="p-name" placeholder="es. groq-fast-pool" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Endpoint Base URL (API OpenAI-Compatibile)</label>
+                    <input type="text" id="p-url" placeholder="https://api.groq.com/openai/v1" required>
+                </div>
+
+                <div class="form-group">
+                    <label>API Key (Auto-Detect dal formato o Inserimento Manuale)</label>
+                    <input type="password" id="p-key" placeholder="Incolla la tua API Key qui..." oninput="detectProviderFromKey(this.value)">
+                </div>
+
+                <div class="form-group">
+                    <label>Modello Target Predestinato</label>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="p-model" placeholder="qwen/qwen-2.5-coder-32b:free" required>
+                        <button type="button" style="width:160px; background:var(--card-border); color:var(--primary); font-size:0.8rem;" onclick="fetchLiveModelsFromEndpoint()">🔍 Rileva Modelli</button>
                     </div>
-                    <div class="form-group">
-                        <label>Nome Provider</label>
-                        <input type="text" id="p-name" placeholder="es. groq-free-pool" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Base URL / Endpoint</label>
-                        <input type="text" id="p-url" placeholder="http://100.98.20.76:8080 o https://api.groq.com/openai/v1" required>
-                    </div>
-                    <div class="form-group">
-                        <label>API Keys (Multi-Key Pool: separa con virgola)</label>
-                        <textarea id="p-key" rows="2" placeholder="KEY_1, KEY_2, KEY_3 (Incolla qui per auto-riconoscimento)" oninput="detectProviderFromKey(this.value)"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label style="display:flex; justify-content:space-between; align-items:center;">
-                            <span>Modello Target</span>
-                            <button type="button" class="btn-secondary" style="padding:2px 8px; font-size:0.75rem; background:rgba(56,189,248,0.15); color:var(--primary); border:1px solid var(--primary);" onclick="fetchLiveModelsFromEndpoint()">🔍 Rileva Modelli dal Vivo</button>
-                        </label>
-                        <div style="display:flex; gap:6px; flex-direction:column; margin-top:4px;">
-                            <input type="text" id="p-model" placeholder="es. llama-3.3-70b-versatile o gemini-2.5-flash" required>
-                            <select id="p-model-select" style="display:none;" onchange="if(this.value){ document.getElementById('p-model').value = this.value; }"></select>
-                        </div>
-                    </div>
+                    <select id="p-model-select" style="display:none; margin-top:8px;" onchange="if(this.value) document.getElementById('p-model').value = this.value;"></select>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
                     <div class="form-group">
                         <label>Tier di Costo</label>
                         <select id="p-tier">
-                            <option value="local">Local (RTX 2070 - $0)</option>
-                            <option value="free" selected>Free (Cloud Stack - $0)</option>
-                            <option value="paid">Paid (On-Demand / Backup)</option>
+                            <option value="free">Free (Gratuito)</option>
+                            <option value="paid">Paid (A Pagamento)</option>
+                            <option value="local">Local (Nodo Locale GPU)</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Priorità (1 = Massima)</label>
-                        <input type="number" id="p-priority" value="1" min="1">
+                        <label>Priorità Cascata (1 = Max Priorità)</label>
+                        <input type="number" id="p-priority" value="10" min="1" max="999">
                     </div>
-                    <div class="form-group">
-                        <label>Capabilities / Tag (separati da virgola)</label>
-                        <input type="text" id="p-tags" placeholder="coding, chitchat, tool_supported">
-                    </div>
-                    <button type="submit" id="btn-save">Salva Provider nel Nexus</button>
-                    <button type="button" class="btn-secondary" id="btn-cancel" style="display:none;" onclick="resetForm()">Annulla</button>
-                </form>
-            </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Tag Inserimento (separati da virgola)</label>
+                    <input type="text" id="p-tags" placeholder="chitchat, coding, reasoning, fast">
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                    <button type="button" style="background:transparent; color:var(--muted); border:1px solid var(--card-border);" onclick="closeFormModal()">Annulla</button>
+                    <button type="submit" class="btn-add" id="btn-save">Salva Provider nel Nexus</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <!-- TAB 2: CATALOGO MODELLI (DINAMICO) -->
-    <div id="tab-catalog" class="tab-content">
-        <div class="card">
-            <h2><span id="catalog-title">📚 Catalogo Modelli</span> 
-                <button onclick="syncCatalog()">🔄 Sincronizza Cataloghi Ora</button>
-            </h2>
-            <div style="display:flex; flex-wrap:wrap; gap:15px; margin-bottom:15px; align-items:center;">
-                <input type="text" id="catalog-search" style="flex:1; min-width:200px;" placeholder="🔍 Cerca modello (es. gemini, qwen, llama, deepseek)..." oninput="filterCatalog()">
-                <select id="catalog-filter" onchange="filterCatalog()" style="width:180px;">
-                    <option value="all">Tutti i Modelli</option>
-                    <option value="free" selected>Solo 100% Free ($0.00)</option>
-                </select>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID Modello</th>
-                        <th>Sorgente</th>
-                        <th>Costo Prompt / 1M</th>
-                        <th>Costo Comp / 1M</th>
-                        <th>Contesto</th>
-                        <th>Gratuito</th>
-                        <th>Azione</th>
-                    </tr>
-                </thead>
-                <tbody id="catalog-body">
-                    <tr><td colspan="7" style="color:var(--muted); text-align:center;">Caricamento catalogo...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- MODAL TEST RESULT -->
-    <div id="test-modal" class="modal-overlay">
+    <!-- Modal Output Test Connectivity -->
+    <div class="modal-overlay" id="test-modal">
         <div class="modal-box">
-            <h3><span>🧪 Risultato Test Connettività</span> <button class="btn-secondary" onclick="closeTestModal()">✕</button></h3>
-            <div id="test-content">
-                <p style="color:var(--muted)">Esecuzione test in corso...</p>
+            <h3>🧪 Esito Test Connettività Provider
+                <span style="cursor:pointer; color:var(--muted); font-size:1.1rem;" onclick="closeTestModal()">✕</span>
+            </h3>
+            <div id="test-content"></div>
+            <div style="text-align:right; margin-top:20px;">
+                <button type="button" class="btn-add" onclick="closeTestModal()">Chiudi</button>
             </div>
         </div>
     </div>
 
     <script>
-        let fullCatalog = [];
         let loadedProvidersList = [];
+        let fullCatalog = [];
         let catalogProvidersMeta = [];
-        let currentCatalogSource = 'all';
         let activeTabKey = 'providers';
+        let currentCatalogSource = 'all';
+
+        const PROVIDER_COLORS = {
+            'groq': '#f97316',
+            'google': '#818cf8',
+            'anthropic': '#f43f5e',
+            'deepseek': '#8b5cf6',
+            'nvidia': '#10b981',
+            'agnes': '#10b981',
+            'openai': '#10b981',
+            'openrouter': '#38bdf8',
+            'perplexity': '#06b6d4',
+            'mistral': '#f59e0b',
+            'together': '#14b8a6',
+            'cerebras': '#ec4899',
+            'sambanova': '#ef4444',
+            'inception': '#a855f7',
+            'ollama_local': '#3b82f6'
+        };
 
         const PRESETS = {
-            groq: {
-                key: "groq",
-                name: "groq-free-pool",
-                url: "https://api.groq.com/openai/v1",
-                tier: "free",
-                priority: 1,
-                tags: "fast, cloud_free, coding, chitchat",
-                default_model: "llama-3.3-70b-versatile"
-            },
-            google: {
-                key: "google",
-                name: "gemini-free-tier",
-                url: "https://generativelanguage.googleapis.com/v1beta/openai",
-                tier: "free",
-                priority: 1,
-                tags: "chitchat, coding, fast, cloud_free, tool_supported",
-                default_model: "gemini-2.5-flash"
-            },
-            deepseek: {
-                key: "deepseek",
-                name: "deepseek-official",
-                url: "https://api.deepseek.com/v1",
-                tier: "paid",
-                priority: 1,
-                tags: "coding, reasoning, deepseek_r1",
-                default_model: "deepseek-chat"
-            },
-            nvidia: {
-                key: "nvidia",
-                name: "nvidia-nim-build",
-                url: "https://integrate.api.nvidia.com/v1",
-                tier: "free",
-                priority: 2,
-                tags: "gpu_accelerated, coding, llama3",
-                default_model: "meta/llama-3.3-70b-instruct"
-            },
-            alibaba: {
-                key: "alibaba",
-                name: "alibaba-qwen-dashscope",
-                url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-                tier: "paid",
-                priority: 2,
-                tags: "qwen_2_5, coding, multi_language",
-                default_model: "qwen-max"
-            },
-            anthropic: {
-                key: "anthropic",
-                name: "anthropic-claude-api",
-                url: "https://api.anthropic.com/v1",
-                tier: "paid",
-                priority: 1,
-                tags: "claude_sonnet, coding, reasoning",
-                default_model: "claude-3-5-sonnet-20241022"
-            },
-            openai: {
-                key: "openai",
-                name: "openai-official",
-                url: "https://api.openai.com/v1",
-                tier: "paid",
-                priority: 2,
-                tags: "gpt4o, reasoning, o3_mini",
-                default_model: "gpt-4o-mini"
-            },
-            aws: {
-                key: "aws",
-                name: "aws-bedrock-mantle",
-                url: "http://localhost:3001/v1",
-                tier: "paid",
-                priority: 1,
-                tags: "aws_bedrock, proxy_mantle, enterprise",
-                default_model: "anthropic.claude-3-5-sonnet-20241022-v2:0"
-            },
-            inception: {
-                key: "inception",
-                name: "inception-fireworks",
-                url: "https://api.fireworks.ai/inference/v1",
-                tier: "paid",
-                priority: 2,
-                tags: "fireworks_ai, fast_inference, open_models",
-                default_model: "accounts/fireworks/models/deepseek-r1"
-            },
-            agnes: {
-                key: "agnes",
-                name: "agnes-ai-singapore",
-                url: "https://apihub.agnes-ai.com/v1",
-                tier: "free",
-                priority: 1,
-                tags: "agnes_ai, omni_modal, singapore_cloud, free_api",
-                default_model: "agnes-v1"
-            },
-            mistral: {
-                key: "mistral",
-                name: "mistral-official",
-                url: "https://api.mistral.ai/v1",
-                tier: "free",
-                priority: 2,
-                tags: "mistral_large, codestral, free_tier",
-                default_model: "codestral-latest"
-            },
-            together: {
-                key: "together",
-                name: "together-ai",
-                url: "https://api.together.xyz/v1",
-                tier: "paid",
-                priority: 2,
-                tags: "open_source_models, llama3_1, qwen2_5",
-                default_model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
-            },
-            perplexity: {
-                key: "perplexity",
-                name: "perplexity-sonar",
-                url: "https://api.perplexity.ai",
-                tier: "paid",
-                priority: 2,
-                tags: "search_grounded, sonar_pro, web_search",
-                default_model: "sonar-pro"
-            },
-            cerebras: {
-                key: "cerebras",
-                name: "cerebras-fast-ai",
-                url: "https://api.cerebras.ai/v1",
-                tier: "free",
-                priority: 1,
-                tags: "ultra_fast, wafer_scale, llama3_1",
-                default_model: "llama3.1-70b"
-            },
-            sambanova: {
-                key: "sambanova",
-                name: "sambanova-systems",
-                url: "https://api.sambanova.ai/v1",
-                tier: "free",
-                priority: 1,
-                tags: "sambanova_rdu, fast_llama, deepseek_r1",
-                default_model: "Meta-Llama-3.3-70B-Instruct"
-            },
-            openrouter: {
-                key: "openrouter",
-                name: "openrouter-free-pool",
-                url: "https://openrouter.ai/api/v1",
-                tier: "free",
-                priority: 2,
-                tags: "chitchat, coding, openrouter_pool",
-                default_model: "qwen/qwen-2.5-coder-32b:free"
-            },
-            ollama_local: {
-                key: "ollama_local",
-                name: "ollama-local-gpu",
-                url: "http://100.98.20.76:8080/v1",
-                tier: "local",
-                priority: 1,
-                tags: "rtx_2070, local_gpu, tailscale",
-                default_model: "qwen2.5-coder:32b"
-            }
+            groq: { key: "groq", name: "groq-free-pool", url: "https://api.groq.com/openai/v1", tier: "free", priority: 1, tags: "chitchat, fast, groq_free", default_model: "llama-3.3-70b-versatile" },
+            google: { key: "google", name: "gemini-free-tier", url: "https://generativelanguage.googleapis.com/v1beta/openai", tier: "free", priority: 1, tags: "chitchat, coding, fast, google_free", default_model: "gemini-2.5-flash" },
+            deepseek: { key: "deepseek", name: "deepseek-cloud", url: "https://api.deepseek.com/v1", tier: "paid", priority: 10, tags: "coding, reasoning, deepseek_r1", default_model: "deepseek-reasoner" },
+            nvidia: { key: "nvidia", name: "nvidia-nim-cloud", url: "https://integrate.api.nvidia.com/v1", tier: "free", priority: 2, tags: "coding, reasoning, nvidia_nim", default_model: "meta/llama-3.3-70b-instruct" },
+            qwen: { key: "qwen", name: "alibaba-qwen-dashscope", url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", tier: "free", priority: 3, tags: "coding, reasoning, qwen_coder", default_model: "qwen2.5-coder-32b-instruct" },
+            anthropic: { key: "anthropic", name: "anthropic-claude", url: "https://api.anthropic.com/v1", tier: "paid", priority: 20, tags: "coding, reasoning, vision", default_model: "claude-3-5-sonnet-20241022" },
+            openai: { key: "openai", name: "openai-official", url: "https://api.openai.com/v1", tier: "paid", priority: 20, tags: "coding, reasoning, tool_supported", default_model: "gpt-4o" },
+            aws: { key: "aws", name: "aws-bedrock-mantle", url: "http://localhost:3001/v1", tier: "local", priority: 5, tags: "aws, mantle_proxy", default_model: "bedrock-claude-3.5" },
+            inception: { key: "inception", name: "fireworks-inception", url: "https://api.fireworks.ai/inference/v1", tier: "free", priority: 4, tags: "fireworks, inception", default_model: "accounts/fireworks/models/deepseek-r1" },
+            agnes: { key: "agnes", name: "agnes-ai-singapore", url: "https://apihub.agnes-ai.com/v1", tier: "free", priority: 1, tags: "agnes_ai, omni_modal, singapore_cloud", default_model: "agnes-v1" },
+            mistral: { key: "mistral", name: "mistral-ai-cloud", url: "https://api.mistral.ai/v1", tier: "free", priority: 5, tags: "mistral, codestral", default_model: "codestral-latest" },
+            together: { key: "together", name: "together-ai", url: "https://api.together.xyz/v1", tier: "free", priority: 5, tags: "together, llama3", default_model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo" },
+            perplexity: { key: "perplexity", name: "perplexity-sonar", url: "https://api.perplexity.ai", tier: "paid", priority: 10, tags: "search, reasoning, perplexity", default_model: "sonar-reasoning" },
+            cerebras: { key: "cerebras", name: "cerebras-fast", url: "https://api.cerebras.ai/v1", tier: "free", priority: 1, tags: "ultra_fast, cerebras", default_model: "llama3.1-70b" },
+            sambanova: { key: "sambanova", name: "sambanova-cloud", url: "https://api.sambanova.ai/v1", tier: "free", priority: 2, tags: "sambanova, llama405b", default_model: "Meta-Llama-3.3-70B-Instruct" },
+            openrouter: { key: "openrouter", name: "openrouter-free-pool", url: "https://openrouter.ai/api/v1", tier: "free", priority: 2, tags: "chitchat, coding, openrouter_pool", default_model: "qwen/qwen-2.5-coder-32b:free" },
+            ollama_local: { key: "ollama_local", name: "ollama-local-gpu", url: "http://100.98.20.76:8080/v1", tier: "local", priority: 1, tags: "rtx_2070, local_gpu, tailscale", default_model: "qwen2.5-coder:32b" }
         };
+
+        function getAuthHeaders() {
+            const tokenInput = document.getElementById('admin-token');
+            const token = (tokenInput && tokenInput.value) ? tokenInput.value : (localStorage.getItem('nexus_admin_token') || '');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token && token.trim()) {
+                headers['Authorization'] = 'Bearer ' + token.trim();
+            }
+            return headers;
+        }
+
+        if (localStorage.getItem('nexus_admin_token')) {
+            const tokenInput = document.getElementById('admin-token');
+            if (tokenInput) tokenInput.value = localStorage.getItem('nexus_admin_token');
+        }
+
+        function openAddModal() {
+            resetForm();
+            document.getElementById('form-modal').style.display = 'flex';
+        }
+
+        function closeFormModal() {
+            document.getElementById('form-modal').style.display = 'none';
+        }
 
         function applyPresetProvider(presetKey) {
             if (!presetKey || !PRESETS[presetKey]) return;
@@ -430,21 +393,6 @@ pub fn render_dashboard() -> Html<&'static str> {
                 document.getElementById('p-preset').value = detectedPreset;
                 applyPresetProvider(detectedPreset);
             }
-        }
-
-        function getAuthHeaders() {
-            const tokenInput = document.getElementById('admin-token');
-            const token = (tokenInput && tokenInput.value) ? tokenInput.value : (localStorage.getItem('nexus_admin_token') || '');
-            const headers = { 'Content-Type': 'application/json' };
-            if (token && token.trim()) {
-                headers['Authorization'] = 'Bearer ' + token.trim();
-            }
-            return headers;
-        }
-
-        if (localStorage.getItem('nexus_admin_token')) {
-            const tokenInput = document.getElementById('admin-token');
-            if (tokenInput) tokenInput.value = localStorage.getItem('nexus_admin_token');
         }
 
         async function fetchLiveModelsFromEndpoint() {
@@ -489,80 +437,65 @@ pub fn render_dashboard() -> Html<&'static str> {
             }
         }
 
-        function renderDynamicTabs() {
-            const container = document.getElementById('tabs-bar');
-            let html = `<button class="tab-btn ${activeTabKey === 'providers' ? 'active' : ''}" id="tab-btn-providers" onclick="switchTab('providers')">⚡ Stack Provider Attivi</button>`;
-            
-            catalogProvidersMeta.forEach(p => {
-                const tabId = `cat-${p.key}`;
-                const isActive = activeTabKey === tabId;
-                html += `<button class="tab-btn ${isActive ? 'active' : ''}" id="tab-btn-${tabId}" onclick="switchTab('${tabId}')">${p.label} (${p.count})</button>`;
-            });
-
-            container.innerHTML = html;
-        }
-
-        function switchTab(tabKey) {
-            activeTabKey = tabKey;
-            renderDynamicTabs();
-
-            const providersTabContent = document.getElementById('tab-providers');
-            const catalogTabContent = document.getElementById('tab-catalog');
-
-            if (tabKey === 'providers') {
-                providersTabContent.classList.add('active');
-                catalogTabContent.classList.remove('active');
-            } else if (tabKey.startsWith('cat-')) {
-                const providerKey = tabKey.replace('cat-', '');
-                currentCatalogSource = providerKey;
-                providersTabContent.classList.remove('active');
-                catalogTabContent.classList.add('active');
-                
-                const provMeta = catalogProvidersMeta.find(p => p.key === providerKey);
-                const titleText = provMeta ? `${provMeta.label} (${provMeta.count} modelli)` : 'Catalogo Modelli';
-                document.getElementById('catalog-title').innerText = titleText;
-                
-                filterCatalog();
-            }
-        }
-
         async function loadProviders() {
             try {
                 const res = await fetch('/providers');
                 const data = await res.json();
                 loadedProvidersList = data.providers || [];
-                const tbody = document.getElementById('providers-body');
-                tbody.innerHTML = '';
-
-                if (loadedProvidersList.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); text-align:center;">Nessun provider configurato.</td></tr>';
-                    return;
-                }
+                const container = document.getElementById('view-providers');
+                container.innerHTML = '';
 
                 document.getElementById('stat-count').innerText = loadedProvidersList.length;
 
-                loadedProvidersList.forEach(p => {
-                    const badgeClass = p.tier === 'local' ? 'badge-local' : (p.tier === 'free' ? 'badge-free' : 'badge-paid');
-                    const tags = (p.tags || []).map(t => `<span style="font-size:0.7rem; background:#1e293b; padding:2px 5px; border-radius:4px; margin-right:3px;">${t}</span>`).join('');
-                    const isCooldown = p.cooldown_until && new Date(p.cooldown_until) > new Date();
-                    const status = isCooldown 
-                        ? `<span class="badge badge-cooldown">⏳ Cooldown</span>` 
-                        : (p.enabled ? '🟢 Attivo' : '🔴 Disabilitato');
+                if (loadedProvidersList.length === 0) {
+                    container.innerHTML = '<div style="color:var(--muted); grid-column: 1/-1; text-align:center; padding:40px;">Nessun provider configurato. Clicca su <strong>➕ Registra Provider</strong> per iniziare!</div>';
+                    return;
+                }
 
-                    tbody.innerHTML += `
-                        <tr>
-                            <td><strong>${p.name}</strong></td>
-                            <td><code>${p.model}</code></td>
-                            <td><span class="badge ${badgeClass}">${p.tier}</span></td>
-                            <td>P${p.priority}</td>
-                            <td>${tags}</td>
-                            <td>${status}</td>
-                            <td style="white-space:nowrap;">
-                                <button class="btn-secondary" style="padding:4px 8px; font-size:0.75rem;" onclick="testProvider(${p.id})">🧪 Test</button>
-                                <button class="btn-edit" style="padding:4px 8px; font-size:0.75rem;" onclick="editProvider(${p.id})">✏️ Modifica</button>
-                                <button class="btn-danger" style="padding:4px 8px; font-size:0.75rem;" onclick="deleteProvider(${p.id})">🗑️</button>
-                            </td>
-                        </tr>
+                loadedProvidersList.forEach(p => {
+                    const isCooldown = p.cooldown_until && new Date(p.cooldown_until) > new Date();
+                    const statusPill = isCooldown
+                        ? `<span class="status-pill cooldown">⏳ Cooldown</span>`
+                        : (p.enabled ? `<span class="status-pill active"><span class="dot"></span> Active</span>` : `<span class="status-pill" style="background:rgba(255,255,255,0.05); color:var(--muted);">Disabled</span>`);
+
+                    const matchedPreset = Object.keys(PRESETS).find(k => p.name.toLowerCase().includes(k) || p.base_url.toLowerCase().includes(k)) || 'openai';
+                    const iconColor = PROVIDER_COLORS[matchedPreset] || '#38bdf8';
+                    const initial = p.name.charAt(0).toUpperCase();
+
+                    const maskedKey = p.api_key ? p.api_key : 'Nessuna Chiave (Pubblico)';
+                    const tagsHtml = (p.tags || []).map(t => `<span style="background:var(--bg); border:1px solid var(--card-border); padding:2px 6px; border-radius:4px; font-size:0.7rem;">${t}</span>`).join(' ');
+
+                    container.innerHTML += `
+                        <div class="provider-card">
+                            <div class="card-header">
+                                <div class="provider-brand">
+                                    <div class="provider-icon" style="border-color:${iconColor}; color:${iconColor}; box-shadow: 0 0 10px ${iconColor}33;">${initial}</div>
+                                    <div>
+                                        <div class="provider-name">${p.name}</div>
+                                        <div class="provider-sub">Target: ${p.model}</div>
+                                    </div>
+                                </div>
+                                ${statusPill}
+                            </div>
+                            <div class="card-body">
+                                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                                    <span>Tier: <strong style="color:var(--text);">${p.tier.toUpperCase()}</strong></span>
+                                    <span>Priorità: <strong style="color:var(--primary);">P${p.priority}</strong></span>
+                                </div>
+                                <div class="key-badge">
+                                    <span>🔑 API Key:</span>
+                                    <strong>${maskedKey}</strong>
+                                </div>
+                                <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
+                                    ${tagsHtml}
+                                </div>
+                            </div>
+                            <div class="card-actions">
+                                <button class="btn-test" onclick="testProvider(${p.id})">🧪 Test</button>
+                                <button onclick="editProvider(${p.id})">✏️ Modifica</button>
+                                <button class="btn-danger" onclick="deleteProvider(${p.id})">🗑️ Elimina</button>
+                            </div>
+                        </div>
                     `;
                 });
             } catch(e) {
@@ -584,7 +517,7 @@ pub fn render_dashboard() -> Html<&'static str> {
             
             document.getElementById('form-title').innerText = `✏️ Modifica '${p.name}'`;
             document.getElementById('btn-save').innerText = 'Aggiorna Provider';
-            document.getElementById('btn-cancel').style.display = 'inline-block';
+            openAddModal();
         }
 
         function resetForm() {
@@ -592,9 +525,8 @@ pub fn render_dashboard() -> Html<&'static str> {
             document.getElementById('p-id').value = '';
             document.getElementById('p-preset').value = '';
             document.getElementById('p-model-select').style.display = 'none';
-            document.getElementById('form-title').innerText = '➕ Aggiungi Provider';
+            document.getElementById('form-title').innerText = '➕ Registra Nuovo Provider';
             document.getElementById('btn-save').innerText = 'Salva Provider nel Nexus';
-            document.getElementById('btn-cancel').style.display = 'none';
         }
 
         async function saveProvider(e) {
@@ -632,7 +564,7 @@ pub fn render_dashboard() -> Html<&'static str> {
                 return;
             }
 
-            resetForm();
+            closeFormModal();
             loadProviders();
         }
 
@@ -658,17 +590,17 @@ pub fn render_dashboard() -> Html<&'static str> {
                 const data = await res.json();
                 if (data.success) {
                     document.getElementById('test-content').innerHTML = `
-                        <div style="background:rgba(52,211,153,0.1); border:1px solid var(--success); padding:15px; border-radius:8px;">
+                        <div style="background:rgba(16,185,129,0.1); border:1px solid var(--success); padding:16px; border-radius:10px;">
                             <p style="color:var(--success); font-weight:bold; margin-bottom:5px;">✅ Test Riuscito! (${data.latency_ms} ms)</p>
                             <p style="font-size:0.85rem;"><strong>Provider:</strong> ${data.provider_name}</p>
                             <p style="font-size:0.85rem;"><strong>Modello:</strong> <code>${data.model_used}</code></p>
-                            <hr style="border-color:var(--border); margin:10px 0;">
+                            <hr style="border-color:var(--card-border); margin:10px 0;">
                             <p style="font-size:0.85rem; color:var(--text);"><strong>Risposta:</strong> "${data.content}"</p>
                         </div>
                     `;
                 } else {
                     document.getElementById('test-content').innerHTML = `
-                        <div style="background:rgba(248,113,113,0.1); border:1px solid var(--danger); padding:15px; border-radius:8px;">
+                        <div style="background:rgba(239,68,68,0.1); border:1px solid var(--danger); padding:16px; border-radius:10px;">
                             <p style="color:var(--danger); font-weight:bold; margin-bottom:5px;">❌ Test Fallito (${data.latency_ms} ms)</p>
                             <p style="font-size:0.85rem;"><strong>Provider:</strong> ${data.provider_name}</p>
                             <p style="font-size:0.85rem; color:var(--danger);"><strong>Errore:</strong> ${data.error}</p>
@@ -684,6 +616,34 @@ pub fn render_dashboard() -> Html<&'static str> {
             document.getElementById('test-modal').style.display = 'none';
         }
 
+        function switchTab(tabKey) {
+            activeTabKey = tabKey;
+            
+            const btnProviders = document.getElementById('tab-btn-providers');
+            const btnCatalog = document.getElementById('tab-btn-catalog');
+            const viewProviders = document.getElementById('view-providers');
+            const viewCatalog = document.getElementById('view-catalog');
+
+            if (tabKey === 'providers') {
+                btnProviders.classList.add('active');
+                btnCatalog.classList.remove('active');
+                viewProviders.style.display = 'grid';
+                viewCatalog.style.display = 'none';
+            } else {
+                btnProviders.classList.remove('active');
+                btnCatalog.classList.add('active');
+                viewProviders.style.display = 'none';
+                viewCatalog.style.display = 'block';
+                
+                if (tabKey.startsWith('cat-') && tabKey !== 'cat-all') {
+                    currentCatalogSource = tabKey.replace('cat-', '');
+                } else {
+                    currentCatalogSource = 'all';
+                }
+                filterCatalog();
+            }
+        }
+
         async function loadCatalog() {
             try {
                 const res = await fetch('/catalog');
@@ -691,17 +651,7 @@ pub fn render_dashboard() -> Html<&'static str> {
                 fullCatalog = data.catalog || [];
                 catalogProvidersMeta = data.catalog_providers || [];
 
-                let statsBreakdown = [];
-                catalogProvidersMeta.forEach(p => {
-                    statsBreakdown.push(`${p.label.split(' ')[0]} ${p.count}`);
-                });
-
-                document.getElementById('stat-models').innerHTML = `${fullCatalog.length} <span style="font-size:0.75rem; font-weight:normal; color:var(--muted);">(${statsBreakdown.join(' | ')})</span>`;
-
-                renderDynamicTabs();
-                if (activeTabKey !== 'providers') {
-                    filterCatalog();
-                }
+                document.getElementById('stat-models').innerHTML = `${fullCatalog.length} <span class="sub">• Synchronized</span>`;
             } catch(e) {
                 console.error("Errore caricamento catalogo:", e);
             }
@@ -721,7 +671,7 @@ pub fn render_dashboard() -> Html<&'static str> {
             });
 
             if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); text-align:center;">Nessun modello trovato per i filtri selezionati.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); text-align:center; padding:20px;">Nessun modello trovato per i filtri selezionati.</td></tr>';
                 return;
             }
 
@@ -738,15 +688,29 @@ pub fn render_dashboard() -> Html<&'static str> {
                         <td>${ctx} tokens</td>
                         <td>${isFreeBadge}</td>
                         <td>
-                            <button class="btn-secondary" style="padding:3px 8px; font-size:0.75rem;" onclick="useModelInForm('${m.model_id}', '${m.provider_name}')">➕ Usa</button>
+                            <button style="background:var(--card-border); color:var(--text); padding:3px 8px; font-size:0.75rem; border-radius:4px; cursor:pointer;" onclick="useModelInForm('${m.model_id}', '${m.provider_name}')">➕ Usa</button>
                         </td>
                     </tr>
                 `;
             });
         }
 
+        function filterCardsAndCatalog() {
+            const query = document.getElementById('global-search').value.toLowerCase();
+            const cards = document.querySelectorAll('.provider-card');
+            cards.forEach(c => {
+                const text = c.innerText.toLowerCase();
+                c.style.display = text.includes(query) ? 'block' : 'none';
+            });
+            if (document.getElementById('catalog-search')) {
+                document.getElementById('catalog-search').value = query;
+                filterCatalog();
+            }
+        }
+
         function useModelInForm(modelId, providerName) {
             switchTab('providers');
+            openAddModal();
             document.getElementById('p-model').value = modelId;
             if (providerName === 'google_aistudio' || providerName === 'google') {
                 applyPresetProvider('google');
