@@ -141,31 +141,96 @@ async fn handle_chat_completions(
     Err((StatusCode::BAD_GATEWAY, format!("Failover esausto. Ultimo errore: {}", last_error)))
 }
 
+pub fn redact_secrets(text: &str) -> String {
+    let mut redacted = text.to_string();
+    let key_prefixes = ["gsk_", "AIzaSy", "sk-ant-", "sk-proj-", "sk-or-", "nvapi-", "fw_", "csk-", "pplx-"];
+    for prefix in key_prefixes {
+        while let Some(start) = redacted.find(prefix) {
+            let rest = &redacted[start..];
+            let end_idx = rest.find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ',' || c == '\\' || c == '}')
+                .unwrap_or(rest.len());
+            let raw_key = &rest[..end_idx];
+            if raw_key.len() > 6 {
+                let masked = format!("{}...{}", &raw_key[..4], &raw_key[raw_key.len()-2..]);
+                redacted = redacted.replace(raw_key, &masked);
+            } else {
+                break;
+            }
+        }
+    }
+    redacted
+}
+
+pub fn is_safe_endpoint_url(url_str: &str) -> bool {
+    let lower = url_str.to_lowercase();
+    if !lower.starts_with("http://") && !lower.starts_with("https://") {
+        return false;
+    }
+    if lower.contains("169.254.169.254") || lower.contains("metadata.google.internal") || lower.contains("169.254.") {
+        return false;
+    }
+    true
+}
+
+pub fn verify_admin_auth(headers: &axum::http::HeaderMap) -> Result<(), (StatusCode, String)> {
+    let required_token = match std::env::var("NEXUS_ADMIN_TOKEN") {
+        Ok(t) if !t.trim().is_empty() => t,
+        _ => return Ok(()),
+    };
+
+    let auth_header = headers.get("Authorization")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+
+    if auth_header == format!("Bearer {}", required_token) || auth_header == required_token {
+        Ok(())
+    } else {
+        Err((StatusCode::UNAUTHORIZED, "🔒 Accesso non autorizzato: Token Amministratore (NEXUS_ADMIN_TOKEN) non valido.".to_string()))
+    }
+}
+
 async fn list_providers(State(state): State<AppState>) -> impl IntoResponse {
     let list = state.providers.read().await;
-    Json(serde_json::json!({ "providers": *list }))
+    let mut masked_list = Vec::new();
+    for p in list.iter() {
+        let mut p_json = serde_json::to_value(p).unwrap_or_default();
+        if let Some(ref k) = p.api_key {
+            p_json["api_key"] = serde_json::Value::String(db::mask_api_key(k));
+        }
+        masked_list.push(p_json);
+    }
+    Json(serde_json::json!({ "providers": masked_list }))
 }
 
 async fn create_provider(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(input): Json<ProviderInput>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
-    let id = db::insert_provider_db(&state.db, &input).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    verify_admin_auth(&headers)?;
 
-    // Reload in memoria
+    if !is_safe_endpoint_url(&input.base_url) {
+        return Err((StatusCode::BAD_REQUEST, "⚠️ SSRF Protection: Endpoint non valido o pericoloso.".to_string()));
+    }
+
+    let id = db::insert_provider_db(&state.db, &input).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, redact_secrets(&e.to_string())))?;
+
     let updated = db::load_all_providers(&state.db).await;
     let mut lock = state.providers.write().await;
     *lock = updated;
 
-    info!("➕ Provider '{}' salvato e ricaricato a caldo", input.name);
+    info!("➕ Provider '{}' salvato e ricaricato a caldo", redact_secrets(&input.name));
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id, "status": "created" }))))
 }
 
 async fn delete_provider(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path(id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    verify_admin_auth(&headers)?;
+
     sqlx::query("DELETE FROM providers WHERE id = ?").bind(id).execute(&state.db).await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -319,8 +384,15 @@ pub struct FetchModelsPayload {
 
 async fn handle_fetch_models(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(payload): Json<FetchModelsPayload>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    verify_admin_auth(&headers)?;
+
+    if !is_safe_endpoint_url(&payload.base_url) {
+        return Err((StatusCode::BAD_REQUEST, "⚠️ SSRF Protection: Endpoint non valido o pericoloso.".to_string()));
+    }
+
     let mut url = payload.base_url.trim_end_matches('/').to_string();
     if !url.ends_with("/models") {
         if !url.ends_with("/v1") && !url.ends_with("/v1beta") && !url.ends_with("/openai") {
@@ -339,10 +411,10 @@ async fn handle_fetch_models(
     }
 
     let resp = req.timeout(std::time::Duration::from_secs(12)).send().await
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Impossibile connettersi all'endpoint {}: {}", url, e)))?;
+        .map_err(|e| (StatusCode::BAD_REQUEST, redact_secrets(&format!("Impossibile connettersi all'endpoint {}: {}", url, e))))?;
 
     if !resp.status().is_success() {
-        return Err((StatusCode::BAD_REQUEST, format!("Errore HTTP status {} dall'endpoint {}", resp.status(), url)));
+        return Err((StatusCode::BAD_REQUEST, redact_secrets(&format!("Errore HTTP status {} dall'endpoint {}", resp.status(), url))));
     }
 
     let body: serde_json::Value = resp.json().await
