@@ -660,19 +660,25 @@ async fn handle_fetch_models(
         }
     }
 
-    let mut url = payload.base_url.trim_end_matches('/').to_string();
-    let is_ollama_native = url.ends_with("/api") || url.contains(":11434");
-
-    if !url.ends_with("/models") && !url.ends_with("/tags") {
-        if is_ollama_native {
-            url.push_str("/api/tags");
-        } else {
-            if !url.ends_with("/v1") && !url.ends_with("/v1beta") && !url.ends_with("/openai") {
-                url.push_str("/v1");
-            }
-            url.push_str("/models");
-        }
+    let mut clean_base = payload.base_url.trim_end_matches('/').to_string();
+    if clean_base.ends_with("/v1") {
+        clean_base = clean_base[..clean_base.len() - 3].to_string();
+    } else if clean_base.ends_with("/v1beta") {
+        clean_base = clean_base[..clean_base.len() - 7].to_string();
+    } else if clean_base.ends_with("/openai") {
+        clean_base = clean_base[..clean_base.len() - 7].to_string();
     }
+    let clean_base = clean_base.trim_end_matches('/');
+
+    let is_ollama = payload.base_url.contains("11434") || payload.base_url.contains("ollama");
+
+    let url = if is_ollama {
+        format!("{}/api/tags", clean_base)
+    } else if payload.base_url.ends_with("/models") || payload.base_url.ends_with("/tags") {
+        payload.base_url.clone()
+    } else {
+        format!("{}/v1/models", clean_base)
+    };
 
     let mut req = state.client.get(&url);
     if let Some(key) = &effective_key {
@@ -703,15 +709,56 @@ async fn handle_fetch_models(
                 model_ids.push(name.trim_start_matches("models/").to_string());
             }
         }
-    } else if let Some(models) = body.get("models").and_then(|m| m.as_array()) {
+    }
+
+    if let Some(models) = body.get("models").and_then(|m| m.as_array()) {
         for m in models {
             if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
                 let clean = name.trim_start_matches("models/").to_string();
-                model_ids.push(clean);
+                if !model_ids.contains(&clean) {
+                    model_ids.push(clean);
+                }
             } else if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
-                model_ids.push(id.to_string());
+                let id_str = id.to_string();
+                if !model_ids.contains(&id_str) {
+                    model_ids.push(id_str);
+                }
             } else if let Some(model) = m.get("model").and_then(|i| i.as_str()) {
-                model_ids.push(model.to_string());
+                let m_str = model.to_string();
+                if !model_ids.contains(&m_str) {
+                    model_ids.push(m_str);
+                }
+            }
+        }
+    }
+
+    // Fallback: se l'endpoint è un nodo Ollama (porta 11434 o 'ollama' o localhost), tenta anche /api/tags per estrarre tutti i modelli locali scaricati su disco!
+    if (payload.base_url.contains("11434") || payload.base_url.contains("ollama") || payload.base_url.contains("localhost")) && !url.contains("/api/tags") {
+        let mut clean_base = payload.base_url.trim_end_matches('/').to_string();
+        if clean_base.ends_with("/v1") {
+            clean_base = clean_base[..clean_base.len() - 3].to_string();
+        } else if clean_base.ends_with("/v1beta") {
+            clean_base = clean_base[..clean_base.len() - 7].to_string();
+        } else if clean_base.ends_with("/openai") {
+            clean_base = clean_base[..clean_base.len() - 7].to_string();
+        }
+        let clean_base = clean_base.trim_end_matches('/');
+        let tags_url = format!("{}/api/tags", clean_base);
+
+        if let Ok(tags_resp) = state.client.get(&tags_url).timeout(std::time::Duration::from_secs(5)).send().await {
+            if tags_resp.status().is_success() {
+                if let Ok(tags_body) = tags_resp.json::<serde_json::Value>().await {
+                    if let Some(models) = tags_body.get("models").and_then(|m| m.as_array()) {
+                        for m in models {
+                            if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
+                                let name_str = name.to_string();
+                                if !model_ids.contains(&name_str) {
+                                    model_ids.push(name_str);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
