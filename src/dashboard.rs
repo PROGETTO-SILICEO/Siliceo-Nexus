@@ -47,11 +47,16 @@ pub fn render_dashboard() -> Html<&'static str> {
         button:hover { opacity: 0.9; }
         .btn-danger { background: var(--danger); color: #fff; }
         .btn-secondary { background: var(--border); color: var(--text); }
+        .btn-edit { background: var(--accent); color: #fff; }
         .node-status { display: flex; gap: 10px; align-items: center; font-size: 0.85rem; padding: 8px 12px; background: rgba(56, 189, 248, 0.1); border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.2); }
         .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); display: inline-block; }
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
         .stat-card { background: var(--panel); border: 1px solid var(--border); padding: 15px; border-radius: 10px; text-align: center; }
         .stat-val { font-size: 1.5rem; font-weight: bold; color: var(--primary); margin-top: 5px; }
+        /* Modal Result Box */
+        .modal-overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100; }
+        .modal-box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 25px; width: 90%; max-width: 550px; }
+        .modal-box h3 { margin-bottom: 15px; color: var(--primary); display: flex; justify-content: space-between; }
     </style>
 </head>
 <body>
@@ -111,8 +116,9 @@ pub fn render_dashboard() -> Html<&'static str> {
             </div>
 
             <div class="card">
-                <h2>➕ Aggiungi / Modifica Provider</h2>
+                <h2><span id="form-title">➕ Aggiungi Provider</span></h2>
                 <form id="provider-form" onsubmit="saveProvider(event)">
+                    <input type="hidden" id="p-id">
                     <div class="form-group">
                         <label>Nome Provider</label>
                         <input type="text" id="p-name" placeholder="es. groq-free-pool" required>
@@ -145,7 +151,8 @@ pub fn render_dashboard() -> Html<&'static str> {
                         <label>Capabilities / Tag (separati da virgola)</label>
                         <input type="text" id="p-tags" placeholder="coding, chitchat, tool_supported">
                     </div>
-                    <button type="submit">Salva Provider nel Nexus</button>
+                    <button type="submit" id="btn-save">Salva Provider nel Nexus</button>
+                    <button type="button" class="btn-secondary" id="btn-cancel" style="display:none;" onclick="resetForm()">Annulla</button>
                 </form>
             </div>
         </div>
@@ -182,8 +189,19 @@ pub fn render_dashboard() -> Html<&'static str> {
         </div>
     </div>
 
+    <!-- MODAL TEST RESULT -->
+    <div id="test-modal" class="modal-overlay">
+        <div class="modal-box">
+            <h3><span>🧪 Risultato Test Connettività</span> <button class="btn-secondary" onclick="closeTestModal()">✕</button></h3>
+            <div id="test-content">
+                <p style="color:var(--muted)">Esecuzione test in corso...</p>
+            </div>
+        </div>
+    </div>
+
     <script>
         let fullCatalog = [];
+        let loadedProvidersList = [];
 
         function showTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -199,17 +217,18 @@ pub fn render_dashboard() -> Html<&'static str> {
             try {
                 const res = await fetch('/providers');
                 const data = await res.json();
+                loadedProvidersList = data.providers || [];
                 const tbody = document.getElementById('providers-body');
                 tbody.innerHTML = '';
 
-                if (!data.providers || data.providers.length === 0) {
+                if (loadedProvidersList.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); text-align:center;">Nessun provider configurato.</td></tr>';
                     return;
                 }
 
-                document.getElementById('stat-count').innerText = data.providers.length;
+                document.getElementById('stat-count').innerText = loadedProvidersList.length;
 
-                data.providers.forEach(p => {
+                loadedProvidersList.forEach(p => {
                     const badgeClass = p.tier === 'local' ? 'badge-local' : (p.tier === 'free' ? 'badge-free' : 'badge-paid');
                     const tags = (p.tags || []).map(t => `<span style="font-size:0.7rem; background:#1e293b; padding:2px 5px; border-radius:4px; margin-right:3px;">${t}</span>`).join('');
                     const isCooldown = p.cooldown_until && new Date(p.cooldown_until) > new Date();
@@ -225,8 +244,9 @@ pub fn render_dashboard() -> Html<&'static str> {
                             <td>P${p.priority}</td>
                             <td>${tags}</td>
                             <td>${status}</td>
-                            <td>
-                                <button class="btn-secondary" style="padding:4px 8px; font-size:0.75rem;" onclick="testProvider('${p.name}')">🧪 Test</button>
+                            <td style="white-space:nowrap;">
+                                <button class="btn-secondary" style="padding:4px 8px; font-size:0.75rem;" onclick="testProvider(${p.id})">🧪 Test</button>
+                                <button class="btn-edit" style="padding:4px 8px; font-size:0.75rem;" onclick="editProvider(${p.id})">✏️ Modifica</button>
                                 <button class="btn-danger" style="padding:4px 8px; font-size:0.75rem;" onclick="deleteProvider(${p.id})">🗑️</button>
                             </td>
                         </tr>
@@ -237,8 +257,39 @@ pub fn render_dashboard() -> Html<&'static str> {
             }
         }
 
+        function editProvider(id) {
+            const p = loadedProvidersList.find(x => x.id === id);
+            if (!p) return;
+            document.getElementById('p-id').value = p.id;
+            document.getElementById('p-name').value = p.name;
+            document.getElementById('p-url').value = p.base_url;
+            document.getElementById('p-key').value = p.api_key || '';
+            document.getElementById('p-model').value = p.model;
+            document.getElementById('p-tier').value = p.tier;
+            document.getElementById('p-priority').value = p.priority;
+            document.getElementById('p-tags').value = (p.tags || []).join(', ');
+            
+            document.getElementById('form-title').innerText = `✏️ Modifica '${p.name}'`;
+            document.getElementById('btn-save').innerText = 'Aggiorna Provider';
+            document.getElementById('btn-cancel').style.display = 'inline-block';
+        }
+
+        function resetForm() {
+            document.getElementById('provider-form').reset();
+            document.getElementById('p-id').value = '';
+            document.getElementById('form-title').innerText = '➕ Aggiungi Provider';
+            document.getElementById('btn-save').innerText = 'Salva Provider nel Nexus';
+            document.getElementById('btn-cancel').style.display = 'none';
+        }
+
         async function saveProvider(e) {
             e.preventDefault();
+            const editId = document.getElementById('p-id').value;
+            
+            if (editId) {
+                await fetch(`/providers/${editId}`, { method: 'DELETE' });
+            }
+
             const tags = document.getElementById('p-tags').value.split(',').map(t => t.trim()).filter(Boolean);
             const payload = {
                 name: document.getElementById('p-name').value,
@@ -260,7 +311,7 @@ pub fn render_dashboard() -> Html<&'static str> {
                 body: JSON.stringify(payload)
             });
 
-            document.getElementById('provider-form').reset();
+            resetForm();
             loadProviders();
         }
 
@@ -271,8 +322,40 @@ pub fn render_dashboard() -> Html<&'static str> {
             }
         }
 
-        async function testProvider(name) {
-            alert(`🧪 Inizio test di completamento live per '${name}' via Siliceo-Nexus...`);
+        async function testProvider(id) {
+            document.getElementById('test-modal').style.display = 'flex';
+            document.getElementById('test-content').innerHTML = `
+                <p style="color:var(--muted); text-align:center;">🧪 Invio prompt di test in corso...<br><span style="font-size:0.8rem">Misurazione latenza ed esito...</span></p>
+            `;
+            try {
+                const res = await fetch(`/providers/${id}/test`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('test-content').innerHTML = `
+                        <div style="background:rgba(52,211,153,0.1); border:1px solid var(--success); padding:15px; border-radius:8px;">
+                            <p style="color:var(--success); font-weight:bold; margin-bottom:5px;">✅ Test Riuscito! (${data.latency_ms} ms)</p>
+                            <p style="font-size:0.85rem;"><strong>Provider:</strong> ${data.provider_name}</p>
+                            <p style="font-size:0.85rem;"><strong>Modello:</strong> <code>${data.model_used}</code></p>
+                            <hr style="border-color:var(--border); margin:10px 0;">
+                            <p style="font-size:0.85rem; color:var(--text);"><strong>Risposta:</strong> "${data.content}"</p>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('test-content').innerHTML = `
+                        <div style="background:rgba(248,113,113,0.1); border:1px solid var(--danger); padding:15px; border-radius:8px;">
+                            <p style="color:var(--danger); font-weight:bold; margin-bottom:5px;">❌ Test Fallito (${data.latency_ms} ms)</p>
+                            <p style="font-size:0.85rem;"><strong>Provider:</strong> ${data.provider_name}</p>
+                            <p style="font-size:0.85rem; color:var(--danger);"><strong>Errore:</strong> ${data.error}</p>
+                        </div>
+                    `;
+                }
+            } catch(e) {
+                document.getElementById('test-content').innerHTML = `<p style="color:var(--danger)">Errore di rete durante il test: ${e}</p>`;
+            }
+        }
+
+        function closeTestModal() {
+            document.getElementById('test-modal').style.display = 'none';
         }
 
         async function loadCatalog() {
