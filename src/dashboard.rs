@@ -167,48 +167,6 @@ pub fn render_dashboard() -> Html<&'static str> {
             <div class="stat-label">Gateway Uptime</div>
             <div class="stat-val" style="color:var(--success);">99.8% <span class="sub">30 Days</span></div>
         </div>
-    <!-- Real-Time Telemetry & GPU Load Panel -->
-    <div class="telemetry-panel">
-        <div class="telemetry-header">
-            <div class="telemetry-title">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                <span>LIVE HARDWARE & GATEWAY TELEMETRY</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px; font-size:0.75rem; color:var(--muted); font-family:monospace;">
-                <span class="live-pulse"></span> SYSTEM POLLING (2s)
-            </div>
-        </div>
-        <div class="telemetry-grid">
-            <div class="telemetry-box">
-                <div class="telemetry-label">
-                    <span>RTX 2070 GPU & SYSTEM LOAD</span>
-                    <strong id="telemetry-gpu-pct" style="color:var(--primary);">45%</strong>
-                </div>
-                <div class="gauge-bar">
-                    <div class="gauge-fill" id="telemetry-gpu-bar" style="width: 45%;"></div>
-                </div>
-                <div style="font-size:0.72rem; color:var(--muted); margin-top:6px; font-family:monospace; display:flex; justify-content:space-between;">
-                    <span>Node: beellama-tailscale-2070</span>
-                    <span id="telemetry-mem-val">RAM: 42%</span>
-                </div>
-            </div>
-            <div class="telemetry-box">
-                <div class="telemetry-label">
-                    <span>LATENCY SPARKLINE (MS)</span>
-                    <strong id="telemetry-latency-val" style="color:var(--success);">14 ms</strong>
-                </div>
-                <div class="sparkline-box" id="telemetry-sparkline">
-                    <div class="spark-bar" style="height: 40%;"></div>
-                    <div class="spark-bar" style="height: 60%;"></div>
-                    <div class="spark-bar" style="height: 35%;"></div>
-                    <div class="spark-bar" style="height: 50%;"></div>
-                    <div class="spark-bar" style="height: 75%;"></div>
-                    <div class="spark-bar" style="height: 45%;"></div>
-                    <div class="spark-bar" style="height: 90%;"></div>
-                    <div class="spark-bar active" style="height: 55%;"></div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- Navigation Tabs & Add Action -->
@@ -216,6 +174,7 @@ pub fn render_dashboard() -> Html<&'static str> {
         <div class="tabs-group" id="tabs-bar">
             <button class="tab-btn active" id="tab-btn-providers" onclick="switchTab('providers')">⚡ Provider Catalog</button>
             <button class="tab-btn" id="tab-btn-catalog" onclick="switchTab('cat-all')">📚 Model Gateway (450+)</button>
+            <button class="tab-btn" id="tab-btn-telemetry" onclick="switchTab('telemetry')">📈 Live Telemetry</button>
         </div>
         <button class="btn-add" onclick="openAddModal()">➕ Registra Provider</button>
     </div>
@@ -227,6 +186,80 @@ pub fn render_dashboard() -> Html<&'static str> {
 
     <!-- Alternative View: Model Catalog Table -->
     <div id="view-catalog" class="table-container" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 id="catalog-title" style="color:var(--primary); font-size:1.1rem;">📚 Catalogo Modelli Sincronizzato</h3>
+            <div style="display:flex; gap:10px;">
+                <input type="text" id="catalog-search" placeholder="Filtra modelli..." oninput="filterCatalog()" style="width:220px; padding:6px 12px;">
+                <select id="catalog-filter" onchange="filterCatalog()" style="width:140px; padding:6px 12px;">
+                    <option value="all">Tutti i tipi</option>
+                    <option value="free">Solo Gratuiti</option>
+                </select>
+                <button class="btn-add" style="padding:6px 12px; font-size:0.8rem;" onclick="syncCatalog()">🔄 Sincronizza Ora</button>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Modello ID</th>
+                    <th>Sorgente</th>
+                    <th>Costo Prompt (1M)</th>
+                    <th>Costo Completion (1M)</th>
+                    <th>Contesto</th>
+                    <th>Stato</th>
+                    <th>Azione</th>
+                </tr>
+            </thead>
+            <tbody id="catalog-body">
+                <!-- Rendered dynamically -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Dedicated View: Real-Time Telemetry & Hardware Load -->
+    <div id="view-telemetry" style="display:none;">
+        <div class="telemetry-panel">
+            <div class="telemetry-header">
+                <div class="telemetry-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    <span>LIVE HARDWARE & GATEWAY TELEMETRY DASHBOARD</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; font-size:0.75rem; color:var(--muted); font-family:monospace;">
+                    <span class="live-pulse"></span> SYSTEM POLLING (2s)
+                </div>
+            </div>
+            <div class="telemetry-grid">
+                <div class="telemetry-box">
+                    <div class="telemetry-label">
+                        <span>RTX 2070 GPU & SYSTEM LOAD</span>
+                        <strong id="telemetry-gpu-pct" style="color:var(--primary);">45%</strong>
+                    </div>
+                    <div class="gauge-bar">
+                        <div class="gauge-fill" id="telemetry-gpu-bar" style="width: 45%;"></div>
+                    </div>
+                    <div style="font-size:0.75rem; color:var(--muted); margin-top:10px; font-family:monospace; display:flex; justify-content:space-between;">
+                        <span>Node: beellama-tailscale-2070</span>
+                        <span id="telemetry-mem-val">RAM: 42%</span>
+                    </div>
+                </div>
+                <div class="telemetry-box">
+                    <div class="telemetry-label">
+                        <span>GATEWAY LATENCY SPARKLINE (MS)</span>
+                        <strong id="telemetry-latency-val" style="color:var(--success);">14 ms</strong>
+                    </div>
+                    <div class="sparkline-box" id="telemetry-sparkline" style="height: 48px;">
+                        <div class="spark-bar" style="height: 40%;"></div>
+                        <div class="spark-bar" style="height: 60%;"></div>
+                        <div class="spark-bar" style="height: 35%;"></div>
+                        <div class="spark-bar" style="height: 50%;"></div>
+                        <div class="spark-bar" style="height: 75%;"></div>
+                        <div class="spark-bar" style="height: 45%;"></div>
+                        <div class="spark-bar" style="height: 90%;"></div>
+                        <div class="spark-bar active" style="height: 55%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <h3 id="catalog-title" style="color:var(--primary); font-size:1.1rem;">📚 Catalogo Modelli Sincronizzato</h3>
             <div style="display:flex; gap:10px;">
@@ -726,23 +759,33 @@ pub fn render_dashboard() -> Html<&'static str> {
 
         function switchTab(tabKey) {
             activeTabKey = tabKey;
-            
+
             const btnProviders = document.getElementById('tab-btn-providers');
             const btnCatalog = document.getElementById('tab-btn-catalog');
+            const btnTelemetry = document.getElementById('tab-btn-telemetry');
+
             const viewProviders = document.getElementById('view-providers');
             const viewCatalog = document.getElementById('view-catalog');
+            const viewTelemetry = document.getElementById('view-telemetry');
+
+            btnProviders.classList.remove('active');
+            btnCatalog.classList.remove('active');
+            btnTelemetry.classList.remove('active');
+
+            viewProviders.style.display = 'none';
+            viewCatalog.style.display = 'none';
+            viewTelemetry.style.display = 'none';
 
             if (tabKey === 'providers') {
                 btnProviders.classList.add('active');
-                btnCatalog.classList.remove('active');
                 viewProviders.style.display = 'grid';
-                viewCatalog.style.display = 'none';
+            } else if (tabKey === 'telemetry') {
+                btnTelemetry.classList.add('active');
+                viewTelemetry.style.display = 'block';
             } else {
-                btnProviders.classList.remove('active');
                 btnCatalog.classList.add('active');
-                viewProviders.style.display = 'none';
                 viewCatalog.style.display = 'block';
-                
+
                 if (tabKey.startsWith('cat-') && tabKey !== 'cat-all') {
                     currentCatalogSource = tabKey.replace('cat-', '');
                 } else {
