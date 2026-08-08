@@ -43,7 +43,7 @@ ExecStart=$BIN_DIR/siliceo-nexus
 WorkingDirectory=$INSTALL_DIR
 Restart=always
 RestartSec=3
-Environment=NEXUS_HOST=127.0.0.1:8082
+Environment=NEXUS_ADDR=127.0.0.1:8082
 
 [Install]
 WantedBy=default.target

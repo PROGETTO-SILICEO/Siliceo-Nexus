@@ -123,6 +123,23 @@ Siliceo-Nexus implements standard OpenAI API specifications:
 
 ---
 
+## Network profiles
+
+Nexus defaults to `127.0.0.1:8082`, so a new installation is local-only. To expose it to a LAN, Tailscale mesh, or reverse proxy, set a non-loopback `NEXUS_ADDR` and both tokens:
+
+```dotenv
+NEXUS_ADDR=100.x.y.z:8082
+NEXUS_API_TOKEN=replace-with-a-client-token
+NEXUS_ADMIN_TOKEN=replace-with-an-admin-token
+NEXUS_TRUSTED_ENDPOINT_HOSTS=node-gpu.home,100.x.y.z
+```
+
+`NEXUS_API_TOKEN` protects OpenAI/Anthropic-compatible endpoints. `NEXUS_ADMIN_TOKEN` protects provider management, provider testing, and catalog synchronization. `NEXUS_TRUSTED_ENDPOINT_HOSTS` is a comma-separated allowlist for private endpoints, including HTTP nodes in a trusted mesh; public provider endpoints must use HTTPS. Each deployment defines its own hosts, so no homelab addresses are baked into the application.
+
+`NEXUS_MAX_REQUESTS_PER_MINUTE` sets a global rolling limit for inference traffic and defaults to `120`.
+
+---
+
 ## 🛠️ Quick Start
 
 ### Prerequisites

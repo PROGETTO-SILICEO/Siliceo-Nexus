@@ -140,7 +140,7 @@ pub fn render_dashboard() -> Html<&'static str> {
         <div class="top-right">
             <div class="admin-box">
                 <span style="color:var(--muted);">🔒 Token:</span>
-                <input type="password" id="admin-token" placeholder="NEXUS_ADMIN_TOKEN" oninput="localStorage.setItem('nexus_admin_token', this.value)">
+                <input type="password" id="admin-token" placeholder="NEXUS_ADMIN_TOKEN" oninput="sessionStorage.setItem('nexus_admin_token', this.value)">
             </div>
             <div class="node-status">
                 <span class="dot"></span>
@@ -453,7 +453,7 @@ pub fn render_dashboard() -> Html<&'static str> {
 
         function getAuthHeaders() {
             const tokenInput = document.getElementById('admin-token');
-            const token = (tokenInput && tokenInput.value) ? tokenInput.value : (localStorage.getItem('nexus_admin_token') || '');
+            const token = (tokenInput && tokenInput.value) ? tokenInput.value : (sessionStorage.getItem('nexus_admin_token') || '');
             const headers = { 'Content-Type': 'application/json' };
             if (token && token.trim()) {
                 headers['Authorization'] = 'Bearer ' + token.trim();
@@ -461,9 +461,15 @@ pub fn render_dashboard() -> Html<&'static str> {
             return headers;
         }
 
-        if (localStorage.getItem('nexus_admin_token')) {
+        if (sessionStorage.getItem('nexus_admin_token')) {
             const tokenInput = document.getElementById('admin-token');
-            if (tokenInput) tokenInput.value = localStorage.getItem('nexus_admin_token');
+            if (tokenInput) tokenInput.value = sessionStorage.getItem('nexus_admin_token');
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
         }
 
         function openAddModal(isEdit = false) {
@@ -551,9 +557,16 @@ pub fn render_dashboard() -> Html<&'static str> {
                 }
 
                 if (res.ok && data.models && data.models.length > 0) {
-                    modelSelect.innerHTML = '<option value="">-- Seleziona uno dei ' + data.models.length + ' modelli rilevati dal vivo --</option>';
+                    modelSelect.replaceChildren();
+                    const placeholder = document.createElement('option');
+                    placeholder.value = '';
+                    placeholder.textContent = '-- Seleziona uno dei ' + data.models.length + ' modelli rilevati dal vivo --';
+                    modelSelect.appendChild(placeholder);
                     data.models.forEach(m => {
-                        modelSelect.innerHTML += `<option value="${m}">${m}</option>`;
+                        const option = document.createElement('option');
+                        option.value = m;
+                        option.textContent = m;
+                        modelSelect.appendChild(option);
                     });
                     modelSelect.style.display = 'block';
                     modelInput.value = data.models[0];
@@ -571,7 +584,8 @@ pub fn render_dashboard() -> Html<&'static str> {
 
         async function loadProviders() {
             try {
-                const res = await fetch('/providers');
+                const res = await fetch('/providers', { headers: getAuthHeaders() });
+                if (!res.ok) throw new Error('Autorizzazione amministrativa richiesta');
                 const data = await res.json();
                 loadedProvidersList = data.providers || [];
                 const container = document.getElementById('view-providers');
@@ -592,10 +606,10 @@ pub fn render_dashboard() -> Html<&'static str> {
 
                     const matchedPreset = Object.keys(PRESETS).find(k => p.name.toLowerCase().includes(k) || p.base_url.toLowerCase().includes(k)) || 'openai';
                     const iconColor = PROVIDER_COLORS[matchedPreset] || '#38bdf8';
-                    const svgIcon = PROVIDER_SVGS[matchedPreset] || `<span style="font-weight:bold; font-size:1.1rem;">${p.name.charAt(0).toUpperCase()}</span>`;
+                    const svgIcon = PROVIDER_SVGS[matchedPreset] || `<span style="font-weight:bold; font-size:1.1rem;">${escapeHtml(p.name.charAt(0).toUpperCase())}</span>`;
 
-                    const maskedKey = p.api_key ? p.api_key : 'Nessuna Chiave (Pubblico)';
-                    const tagsHtml = (p.tags || []).map(t => `<span style="background:var(--bg); border:1px solid var(--card-border); padding:2px 6px; border-radius:4px; font-size:0.7rem;">${t}</span>`).join(' ');
+                    const maskedKey = p.api_key ? escapeHtml(p.api_key) : 'Nessuna Chiave (Pubblico)';
+                    const tagsHtml = (p.tags || []).map(t => `<span style="background:var(--bg); border:1px solid var(--card-border); padding:2px 6px; border-radius:4px; font-size:0.7rem;">${escapeHtml(t)}</span>`).join(' ');
 
                     container.innerHTML += `
                         <div class="provider-card">
@@ -603,15 +617,15 @@ pub fn render_dashboard() -> Html<&'static str> {
                                 <div class="provider-brand">
                                     <div class="provider-icon" style="border-color:${iconColor}; color:${iconColor}; box-shadow: 0 0 12px ${iconColor}44;">${svgIcon}</div>
                                     <div>
-                                        <div class="provider-name">${p.name}</div>
-                                        <div class="provider-sub">Target: ${p.model}</div>
+                                        <div class="provider-name">${escapeHtml(p.name)}</div>
+                                        <div class="provider-sub">Target: ${escapeHtml(p.model)}</div>
                                     </div>
                                 </div>
                                 ${statusPill}
                             </div>
                             <div class="card-body">
                                 <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
-                                    <span>Tier: <strong style="color:var(--text);">${p.tier.toUpperCase()}</strong></span>
+                                    <span>Tier: <strong style="color:var(--text);">${escapeHtml(p.tier.toUpperCase())}</strong></span>
                                     <span>Priorità: <strong style="color:var(--primary);">P${p.priority}</strong></span>
                                 </div>
                                 <div class="key-badge">
@@ -769,29 +783,29 @@ pub fn render_dashboard() -> Html<&'static str> {
                 <p style="color:var(--muted); text-align:center;">🧪 Invio prompt di test in corso...<br><span style="font-size:0.8rem">Misurazione latenza ed esito...</span></p>
             `;
             try {
-                const res = await fetch(`/providers/${id}/test`, { method: 'POST' });
+                const res = await fetch(`/providers/${id}/test`, { method: 'POST', headers: getAuthHeaders() });
                 const data = await res.json();
                 if (data.success) {
                     document.getElementById('test-content').innerHTML = `
                         <div style="background:rgba(16,185,129,0.1); border:1px solid var(--success); padding:16px; border-radius:10px;">
                             <p style="color:var(--success); font-weight:bold; margin-bottom:5px;">✅ Test Riuscito! (${data.latency_ms} ms)</p>
-                            <p style="font-size:0.85rem;"><strong>Provider:</strong> ${data.provider_name}</p>
-                            <p style="font-size:0.85rem;"><strong>Modello:</strong> <code>${data.model_used}</code></p>
+                            <p style="font-size:0.85rem;"><strong>Provider:</strong> ${escapeHtml(data.provider_name)}</p>
+                            <p style="font-size:0.85rem;"><strong>Modello:</strong> <code>${escapeHtml(data.model_used)}</code></p>
                             <hr style="border-color:var(--card-border); margin:10px 0;">
-                            <p style="font-size:0.85rem; color:var(--text);"><strong>Risposta:</strong> "${data.content}"</p>
+                            <p style="font-size:0.85rem; color:var(--text);"><strong>Risposta:</strong> "${escapeHtml(data.content)}"</p>
                         </div>
                     `;
                 } else {
                     document.getElementById('test-content').innerHTML = `
                         <div style="background:rgba(239,68,68,0.1); border:1px solid var(--danger); padding:16px; border-radius:10px;">
                             <p style="color:var(--danger); font-weight:bold; margin-bottom:5px;">❌ Test Fallito (${data.latency_ms} ms)</p>
-                            <p style="font-size:0.85rem;"><strong>Provider:</strong> ${data.provider_name}</p>
-                            <p style="font-size:0.85rem; color:var(--danger);"><strong>Errore:</strong> ${data.error}</p>
+                            <p style="font-size:0.85rem;"><strong>Provider:</strong> ${escapeHtml(data.provider_name)}</p>
+                            <p style="font-size:0.85rem; color:var(--danger);"><strong>Errore:</strong> ${escapeHtml(data.error)}</p>
                         </div>
                     `;
                 }
             } catch(e) {
-                document.getElementById('test-content').innerHTML = `<p style="color:var(--danger)">Errore di rete durante il test: ${e}</p>`;
+                document.getElementById('test-content').innerHTML = `<p style="color:var(--danger)">Errore di rete durante il test: ${escapeHtml(e)}</p>`;
             }
         }
 
@@ -870,22 +884,25 @@ pub fn render_dashboard() -> Html<&'static str> {
 
             filtered.slice(0, 200).forEach(m => {
                 const isFreeBadge = m.is_free ? '<span class="badge badge-free">FREE</span>' : '<span class="badge badge-paid">PAID</span>';
-                const sourceBadge = `<span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">${m.provider_name}</span>`;
+                    const sourceBadge = `<span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">${escapeHtml(m.provider_name)}</span>`;
                 const ctx = (m.context_length / 1024).toFixed(0) + 'k';
                 tbody.innerHTML += `
                     <tr>
-                        <td><code>${m.model_id}</code></td>
+                        <td><code>${escapeHtml(m.model_id)}</code></td>
                         <td>${sourceBadge}</td>
                         <td>$${m.prompt_cost_per_1m.toFixed(4)}</td>
                         <td>$${m.completion_cost_per_1m.toFixed(4)}</td>
                         <td>${ctx} tokens</td>
                         <td>${isFreeBadge}</td>
                         <td>
-                            <button style="background:var(--card-border); color:var(--text); padding:3px 8px; font-size:0.75rem; border-radius:4px; cursor:pointer;" onclick="useModelInForm('${m.model_id}', '${m.provider_name}')">➕ Usa</button>
+                            <button class="use-model-button" data-model="${escapeHtml(m.model_id)}" data-provider="${escapeHtml(m.provider_name)}" style="background:var(--card-border); color:var(--text); padding:3px 8px; font-size:0.75rem; border-radius:4px; cursor:pointer;">➕ Usa</button>
                         </td>
                     </tr>
-                `;
-            });
+                    `;
+                });
+                tbody.querySelectorAll('.use-model-button').forEach(button => {
+                    button.addEventListener('click', () => useModelInForm(button.dataset.model, button.dataset.provider));
+                });
         }
 
         function filterCardsAndCatalog() {
@@ -918,7 +935,7 @@ pub fn render_dashboard() -> Html<&'static str> {
 
         async function syncCatalog() {
             alert("🔄 Sincronizzazione cataloghi (OpenRouter + Google AI Studio) avviata...");
-            const res = await fetch('/catalog/sync', { method: 'POST' });
+            const res = await fetch('/catalog/sync', { method: 'POST', headers: getAuthHeaders() });
             const data = await res.json();
             alert(`✅ Sincronizzazione completata!\n• OpenRouter: ${data.openrouter_count} modelli\n• Google AI Studio: ${data.google_count} modelli`);
             loadCatalog();

@@ -1,12 +1,15 @@
 use axum::{
     extract::{Json, Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{delete, get, post},
     Router,
 };
+use reqwest::{redirect::Policy, Url};
+use std::collections::VecDeque;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{info, warn, error};
 
 mod types;
@@ -23,6 +26,7 @@ pub struct AppState {
     pub db: sqlx::SqlitePool,
     pub providers: Arc<RwLock<Vec<Provider>>>,
     pub client: reqwest::Client,
+    pub request_window: Arc<Mutex<VecDeque<std::time::Instant>>>,
 }
 
 #[tokio::main]
@@ -56,7 +60,12 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         db: db.clone(),
         providers: Arc::new(RwLock::new(providers_list)),
-        client: reqwest::Client::new(),
+        // Redirects can turn a safe-looking URL into an internal request. Each
+        // endpoint is validated before use, so do not follow redirects.
+        client: reqwest::Client::builder()
+            .redirect(Policy::none())
+            .build()?,
+        request_window: Arc::new(Mutex::new(VecDeque::new())),
     };
 
     // Avvia il loop di aggiornamento catalogo modelli in background (OpenRouter 24h sync)
@@ -88,7 +97,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/stats", get(handle_stats))
         .with_state(state);
 
-    let addr = std::env::var("NEXUS_ADDR").unwrap_or_else(|_| "0.0.0.0:8082".to_string());
+    let addr = std::env::var("NEXUS_ADDR").unwrap_or_else(|_| "127.0.0.1:8082".to_string());
+    ensure_network_auth_is_configured(&addr)?;
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     info!("🌐 Siliceo-Nexus listening on http://{}", addr);
@@ -152,8 +162,11 @@ async fn handle_health() -> impl IntoResponse {
 
 async fn handle_chat_completions(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<LLMRequest>,
 ) -> Result<Json<LLMResponse>, (StatusCode, String)> {
+    verify_api_auth(&headers)?;
+    enforce_inference_rate_limit(&state).await?;
     info!("📥 Incoming chat completions request (messages: {})", request.messages.len());
 
     // 1. Classificazione dell'intento in < 1ms
@@ -202,7 +215,12 @@ pub struct AnthropicMessageRequest {
     pub temperature: Option<f32>,
 }
 
-async fn handle_v1_models(State(state): State<AppState>) -> impl IntoResponse {
+async fn handle_v1_models(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    verify_api_auth(&headers)?;
+    enforce_inference_rate_limit(&state).await?;
     let rows = sqlx::query("SELECT model_id, provider_name FROM models_catalog LIMIT 2000")
         .fetch_all(&state.db)
         .await
@@ -242,16 +260,18 @@ async fn handle_v1_models(State(state): State<AppState>) -> impl IntoResponse {
         }));
     }
 
-    Json(serde_json::json!({
+    Ok(Json(serde_json::json!({
         "object": "list",
         "data": data
-    }))
+    })))
 }
 
 async fn handle_anthropic_messages(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(anthropic_req): Json<AnthropicMessageRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    verify_api_auth(&headers)?;
     info!("📥 Incoming Anthropic /v1/messages request (messages: {})", anthropic_req.messages.len());
 
     let mut llm_messages = Vec::new();
@@ -372,19 +392,94 @@ pub fn redact_secrets(text: &str) -> String {
     redacted
 }
 
-pub fn is_safe_endpoint_url(url_str: &str) -> bool {
-    let lower = url_str.to_lowercase();
-    if !lower.starts_with("http://") && !lower.starts_with("https://") {
-        return false;
-    }
-    if lower.contains("169.254.169.254") || lower.contains("metadata.google.internal") || lower.contains("169.254.") {
-        return false;
-    }
-    true
+fn configured_trusted_endpoint_hosts() -> Vec<String> {
+    std::env::var("NEXUS_TRUSTED_ENDPOINT_HOSTS")
+        .unwrap_or_default()
+        .split(',')
+        .map(|host| host.trim().trim_matches('[').trim_matches(']').to_ascii_lowercase())
+        .filter(|host| !host.is_empty())
+        .collect()
 }
 
-pub fn verify_admin_auth(headers: &axum::http::HeaderMap) -> Result<(), (StatusCode, String)> {
-    let required_token = match std::env::var("NEXUS_ADMIN_TOKEN") {
+fn is_private_or_special_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let octets = ip.octets();
+            ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+                || octets[0] == 0
+                || octets[0] >= 224
+                || (octets[0] == 100 && (64..=127).contains(&octets[1]))
+                || (octets[0] == 192 && octets[1] == 0 && octets[2] == 2)
+                || (octets[0] == 198 && (octets[1] == 18 || octets[1] == 19))
+                || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
+        }
+        IpAddr::V6(ip) => {
+            ip.is_loopback()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+                || ip.is_unique_local()
+                || ip.is_unicast_link_local()
+        }
+    }
+}
+
+pub async fn is_safe_endpoint_url(url_str: &str) -> bool {
+    let url = match Url::parse(url_str) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") => url,
+        _ => return false,
+    };
+
+    if !url.username().is_empty() || url.password().is_some() {
+        return false;
+    }
+
+    let host = match url.host_str() {
+        Some(host) => host.trim_matches('[').trim_matches(']').to_ascii_lowercase(),
+        None => return false,
+    };
+    let trusted_host = configured_trusted_endpoint_hosts().contains(&host);
+
+    // Plain HTTP is only acceptable for an endpoint the deployment explicitly
+    // trusts, such as a private mesh node managed by the operator.
+    if url.scheme() == "http" && !trusted_host {
+        return false;
+    }
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return trusted_host || !is_private_or_special_ip(ip);
+    }
+
+    let port = url.port_or_known_default().unwrap_or(443);
+    let resolved = match tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        tokio::net::lookup_host((host.as_str(), port)),
+    )
+    .await
+    {
+        Ok(Ok(addresses)) => addresses,
+        _ => return false,
+    };
+
+    let addresses: Vec<IpAddr> = resolved.map(|address| address.ip()).collect();
+    !addresses.is_empty()
+        && (trusted_host || addresses.iter().all(|ip| !is_private_or_special_ip(*ip)))
+}
+
+fn same_endpoint_origin(left: &str, right: &str) -> bool {
+    match (Url::parse(left), Url::parse(right)) {
+        (Ok(left), Ok(right)) => left.scheme() == right.scheme()
+            && left.host_str() == right.host_str()
+            && left.port_or_known_default() == right.port_or_known_default(),
+        _ => false,
+    }
+}
+
+fn verify_token(headers: &HeaderMap, env_name: &str, label: &str) -> Result<(), (StatusCode, String)> {
+    let required_token = match std::env::var(env_name) {
         Ok(t) if !t.trim().is_empty() => t,
         _ => return Ok(()),
     };
@@ -396,11 +491,76 @@ pub fn verify_admin_auth(headers: &axum::http::HeaderMap) -> Result<(), (StatusC
     if auth_header == format!("Bearer {}", required_token) || auth_header == required_token {
         Ok(())
     } else {
-        Err((StatusCode::UNAUTHORIZED, "🔒 Accesso non autorizzato: Token Amministratore (NEXUS_ADMIN_TOKEN) non valido.".to_string()))
+        Err((StatusCode::UNAUTHORIZED, format!("Accesso non autorizzato: token {} non valido.", label)))
     }
 }
 
-async fn list_providers(State(state): State<AppState>) -> impl IntoResponse {
+pub fn verify_admin_auth(headers: &HeaderMap) -> Result<(), (StatusCode, String)> {
+    verify_token(headers, "NEXUS_ADMIN_TOKEN", "amministratore")
+}
+
+pub fn verify_api_auth(headers: &HeaderMap) -> Result<(), (StatusCode, String)> {
+    verify_token(headers, "NEXUS_API_TOKEN", "API")
+}
+
+fn inference_rate_limit() -> usize {
+    parse_inference_rate_limit(std::env::var("NEXUS_MAX_REQUESTS_PER_MINUTE").ok())
+}
+
+fn parse_inference_rate_limit(value: Option<String>) -> usize {
+    value
+        .and_then(|value| value.parse().ok())
+        .filter(|value: &usize| *value > 0)
+        .unwrap_or(120)
+}
+
+async fn enforce_inference_rate_limit(state: &AppState) -> Result<(), (StatusCode, String)> {
+    let now = std::time::Instant::now();
+    let window_start = now - std::time::Duration::from_secs(60);
+    let mut requests = state.request_window.lock().await;
+
+    while requests.front().is_some_and(|timestamp| *timestamp <= window_start) {
+        requests.pop_front();
+    }
+    if requests.len() >= inference_rate_limit() {
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            "Limite di richieste Nexus raggiunto. Riprova tra un minuto.".to_string(),
+        ));
+    }
+    requests.push_back(now);
+    Ok(())
+}
+
+fn is_loopback_bind(addr: &str) -> bool {
+    if let Ok(socket_addr) = addr.parse::<SocketAddr>() {
+        return socket_addr.ip().is_loopback();
+    }
+
+    addr.rsplit_once(':')
+        .map(|(host, _)| matches!(host.trim_matches('[').trim_matches(']'), "localhost" | "127.0.0.1" | "::1"))
+        .unwrap_or(false)
+}
+
+fn ensure_network_auth_is_configured(addr: &str) -> anyhow::Result<()> {
+    if is_loopback_bind(addr) {
+        return Ok(());
+    }
+
+    for name in ["NEXUS_API_TOKEN", "NEXUS_ADMIN_TOKEN"] {
+        if std::env::var(name).map(|value| !value.trim().is_empty()).unwrap_or(false) {
+            continue;
+        }
+        anyhow::bail!("{} is required when NEXUS_ADDR is not a loopback address", name);
+    }
+    Ok(())
+}
+
+async fn list_providers(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    verify_admin_auth(&headers)?;
     let list = state.providers.read().await;
     let mut masked_list = Vec::new();
     for p in list.iter() {
@@ -410,7 +570,7 @@ async fn list_providers(State(state): State<AppState>) -> impl IntoResponse {
         }
         masked_list.push(p_json);
     }
-    Json(serde_json::json!({ "providers": masked_list }))
+    Ok(Json(serde_json::json!({ "providers": masked_list })))
 }
 
 async fn create_provider(
@@ -420,7 +580,7 @@ async fn create_provider(
 ) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
     verify_admin_auth(&headers)?;
 
-    if !is_safe_endpoint_url(&input.base_url) {
+    if !is_safe_endpoint_url(&input.base_url).await {
         return Err((StatusCode::BAD_REQUEST, "⚠️ SSRF Protection: Endpoint non valido o pericoloso.".to_string()));
     }
 
@@ -522,7 +682,9 @@ async fn handle_get_catalog(
 
 async fn handle_sync_catalog(
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    verify_admin_auth(&headers)?;
     let (or_count, google_count) = catalog::sync_all_catalogs(&state.client, &state.db).await;
 
     Ok(Json(serde_json::json!({
@@ -535,8 +697,10 @@ async fn handle_sync_catalog(
 
 async fn handle_test_provider(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    verify_admin_auth(&headers)?;
     let list = state.providers.read().await;
     let target = list.iter().find(|p| p.id == Some(id))
         .cloned()
@@ -632,7 +796,7 @@ async fn handle_fetch_models(
         return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
     }
 
-    if !is_safe_endpoint_url(&payload.base_url) {
+    if !is_safe_endpoint_url(&payload.base_url).await {
         return Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({ "success": false, "error": "⚠️ SSRF Protection: Endpoint non valido o pericoloso." }))));
     }
 
@@ -648,13 +812,17 @@ async fn handle_fetch_models(
         let list = state.providers.read().await;
         if let Some(p_id) = payload.provider_id {
             if let Some(p) = list.iter().find(|x| x.id == Some(p_id)) {
-                effective_key = p.api_key.clone();
+                if same_endpoint_origin(&payload.base_url, &p.base_url) {
+                    effective_key = p.api_key.clone();
+                }
             }
         }
         if effective_key.is_none() {
             if let Some(ref p_name) = payload.provider_name {
                 if let Some(p) = list.iter().find(|x| x.name == *p_name) {
-                    effective_key = p.api_key.clone();
+                    if same_endpoint_origin(&payload.base_url, &p.base_url) {
+                        effective_key = p.api_key.clone();
+                    }
                 }
             }
         }
@@ -786,4 +954,46 @@ async fn handle_fetch_models(
         "count": model_ids.len(),
         "models": model_ids
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_loopback_bind, is_private_or_special_ip, parse_inference_rate_limit, same_endpoint_origin};
+    use std::net::{IpAddr, Ipv4Addr};
+
+    #[test]
+    fn detects_loopback_bindings() {
+        assert!(is_loopback_bind("127.0.0.1:8082"));
+        assert!(is_loopback_bind("[::1]:8082"));
+        assert!(is_loopback_bind("localhost:8082"));
+        assert!(!is_loopback_bind("0.0.0.0:8082"));
+        assert!(!is_loopback_bind("100.64.0.10:8082"));
+    }
+
+    #[test]
+    fn classifies_private_and_special_addresses() {
+        assert!(is_private_or_special_ip(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))));
+        assert!(is_private_or_special_ip(IpAddr::V4(Ipv4Addr::new(100, 98, 20, 76))));
+        assert!(is_private_or_special_ip(IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254))));
+        assert!(!is_private_or_special_ip(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))));
+    }
+
+    #[test]
+    fn only_reuses_keys_for_the_same_origin() {
+        assert!(same_endpoint_origin(
+            "https://api.example.test/v1",
+            "https://api.example.test/v1/models"
+        ));
+        assert!(!same_endpoint_origin(
+            "https://api.example.test/v1",
+            "https://attacker.example.test/v1"
+        ));
+    }
+
+    #[test]
+    fn uses_a_safe_default_rate_limit() {
+        assert_eq!(parse_inference_rate_limit(None), 120);
+        assert_eq!(parse_inference_rate_limit(Some("0".to_string())), 120);
+        assert_eq!(parse_inference_rate_limit(Some("42".to_string())), 42);
+    }
 }

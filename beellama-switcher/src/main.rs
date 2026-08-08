@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let models_dir_str = std::env::var("BEELLAMA_MODELS_DIR")
-        .unwrap_or_else(|_| "/home/guardiano/models".to_string());
+        .unwrap_or_else(|_| "/home/alforiva/inference/models".to_string());
     let models_dir = PathBuf::from(&models_dir_str);
 
     if !models_dir.exists() {
@@ -51,7 +51,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let beellama_bin = std::env::var("BEELLAMA_BIN")
-        .unwrap_or_else(|_| "llama-server".to_string());
+        .unwrap_or_else(|_| "/home/alforiva/inference/beellama_src/build/bin/llama-server".to_string());
     let internal_port = std::env::var("BEELLAMA_PORT")
         .unwrap_or_else(|_| "8081".to_string())
         .parse::<u16>()
