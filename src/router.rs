@@ -67,51 +67,55 @@ pub fn classify_intent(request: &LLMRequest) -> IntentTag {
     IntentTag::Reasoning
 }
 
-/// Seleziona il miglior provider disponibile basandosi sull'intento e sulle capability dinamiche
-pub async fn select_provider(
+/// Seleziona la lista ordinata dei provider idonei per la cascata di failover
+pub async fn select_eligible_providers(
     providers: &Arc<RwLock<Vec<Provider>>>,
     intent: IntentTag,
     requires_tools: bool,
-) -> Result<Provider, String> {
+) -> Vec<Provider> {
     let list = providers.read().await;
     let required_tag = intent.as_str();
 
     info!("🎯 Intent classificato: '{}' (requires_tools: {})", required_tag, requires_tools);
 
-    // Cerca prima tra i provider abilitati non in cooldown che possiedono il tag dell'intento
-    for p in list.iter() {
-        if !p.enabled {
-            continue;
-        }
+    let mut eligible = Vec::new();
 
-        // Verifica Cooldown
+    // 1. Aggiungi provider con tag specifico o general
+    for p in list.iter() {
+        if !p.enabled { continue; }
         if let Some(ref cooldown) = p.cooldown_until {
             if let Ok(until) = chrono::DateTime::parse_from_rfc3339(cooldown) {
-                if chrono::Utc::now() < until {
-                    continue; // In cooldown
-                }
+                if chrono::Utc::now() < until { continue; }
             }
         }
+        if requires_tools && !p.tags.contains(&"tool_supported".to_string()) { continue; }
 
-        // Se sono richiesti tool, il provider deve avere il tag tool_supported
-        if requires_tools && !p.tags.contains(&"tool_supported".to_string()) {
-            continue;
-        }
-
-        // Se ha il tag richiesto per l'intento, o se è un fallback generico
         if p.tags.contains(&required_tag.to_string()) || p.tags.contains(&"general".to_string()) {
-            info!("✅ Selezionato provider '{}' (model: {}) per intent '{}'", p.name, p.model, required_tag);
-            return Ok(p.clone());
+            eligible.push(p.clone());
         }
     }
 
-    // Fallback: prendi il primo provider abilitato disponibile
+    // 2. Aggiungi i rimanenti abilitati per il fallback
     for p in list.iter() {
-        if p.enabled {
-            warn!("⚠️ Nessun provider specifico per tag '{}'. Uso fallback '{}'", required_tag, p.name);
-            return Ok(p.clone());
+        if p.enabled && !eligible.iter().any(|e| e.name == p.name) {
+            eligible.push(p.clone());
         }
     }
 
-    Err("Nessun provider LLM attivo o disponibile in Siliceo-Nexus".to_string())
+    eligible
+}
+
+/// Seleziona il miglior provider singolo disponibile
+pub async fn select_provider(
+    providers: &Arc<RwLock<Vec<Provider>>>,
+    intent: IntentTag,
+    requires_tools: bool,
+) -> Result<Provider, String> {
+    let eligible = select_eligible_providers(providers, intent, requires_tools).await;
+    if let Some(first) = eligible.first() {
+        info!("✅ Selezionato provider primario '{}' (model: {})", first.name, first.model);
+        Ok(first.clone())
+    } else {
+        Err("Nessun provider LLM attivo o disponibile in Siliceo-Nexus".to_string())
+    }
 }
