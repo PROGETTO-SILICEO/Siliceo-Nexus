@@ -300,6 +300,25 @@ pub fn render_dashboard() -> Html<&'static str> {
         let activeTabKey = 'providers';
         let currentCatalogSource = 'all';
 
+        const PROVIDER_SVGS = {
+            groq: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.5a4.5 4.5 0 1 1 3.18-7.68"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>`,
+            google: `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z"/></svg>`,
+            anthropic: `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M13.8 3h-3.6L4.5 21h3.7l1.3-4h5l1.3 4h3.7L13.8 3zm-3.1 11l1.7-5.2 1.7 5.2h-3.4z"/></svg>`,
+            deepseek: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L3 21l3.5-.95A8.94 8.94 0 0 0 12 21c4.97 0 9-4.03 9-9s-4.03-9-9-9z"/><path d="M9 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm6 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>`,
+            nvidia: `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M10.15 8.1c1.3.4 2.1 1.5 2.1 2.8v3.2c0 .9-.5 1.8-1.3 2.2-1.3.6-2.9.2-3.7-.9L3 10.2l-1 3.5c.9 2.5 3.3 4.3 6.1 4.3 3.6 0 6.5-2.9 6.5-6.5V9.4c0-2.8-1.8-5.3-4.4-6.1L10.15 8.1zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>`,
+            agnes: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18c6-6 12-4 18-12M3 18c4-1 9-5 9-11M3 18h18"/></svg>`,
+            openai: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 6v12M6 12h12"/></svg>`,
+            qwen: `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`,
+            mistral: `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M4 4h4v16H4V4zm6 0h4v16h-4V4zm6 0h4v16h-4V4z"/></svg>`,
+            perplexity: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/></svg>`,
+            cerebras: `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-2 14.5l-4-4 1.41-1.41L10 13.67l6.59-6.59L18 8.5l-8 8z"/></svg>`,
+            sambanova: `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>`,
+            together: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="12" r="5"/><circle cx="16" cy="12" r="5"/></svg>`,
+            inception: `<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2L2 22h20L12 2zm0 4l6.5 13h-13L12 6z"/></svg>`,
+            openrouter: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`,
+            ollama_local: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 9h6M9 12h6M9 15h4"/></svg>`
+        };
+
         const PROVIDER_COLORS = {
             'groq': '#f97316',
             'google': '#818cf8',
@@ -460,7 +479,7 @@ pub fn render_dashboard() -> Html<&'static str> {
 
                     const matchedPreset = Object.keys(PRESETS).find(k => p.name.toLowerCase().includes(k) || p.base_url.toLowerCase().includes(k)) || 'openai';
                     const iconColor = PROVIDER_COLORS[matchedPreset] || '#38bdf8';
-                    const initial = p.name.charAt(0).toUpperCase();
+                    const svgIcon = PROVIDER_SVGS[matchedPreset] || `<span style="font-weight:bold; font-size:1.1rem;">${p.name.charAt(0).toUpperCase()}</span>`;
 
                     const maskedKey = p.api_key ? p.api_key : 'Nessuna Chiave (Pubblico)';
                     const tagsHtml = (p.tags || []).map(t => `<span style="background:var(--bg); border:1px solid var(--card-border); padding:2px 6px; border-radius:4px; font-size:0.7rem;">${t}</span>`).join(' ');
@@ -469,7 +488,7 @@ pub fn render_dashboard() -> Html<&'static str> {
                         <div class="provider-card">
                             <div class="card-header">
                                 <div class="provider-brand">
-                                    <div class="provider-icon" style="border-color:${iconColor}; color:${iconColor}; box-shadow: 0 0 10px ${iconColor}33;">${initial}</div>
+                                    <div class="provider-icon" style="border-color:${iconColor}; color:${iconColor}; box-shadow: 0 0 12px ${iconColor}44;">${svgIcon}</div>
                                     <div>
                                         <div class="provider-name">${p.name}</div>
                                         <div class="provider-sub">Target: ${p.model}</div>
