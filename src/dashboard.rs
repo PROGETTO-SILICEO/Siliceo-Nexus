@@ -89,7 +89,7 @@ pub fn render_dashboard() -> Html<&'static str> {
 
     <div class="tabs">
         <button class="tab-btn active" onclick="showTab('tab-providers')">⚡ Providers & Pool Stack</button>
-        <button class="tab-btn" onclick="showTab('tab-catalog')">📚 Catalogo Modelli (394)</button>
+        <button id="tab-btn-catalog" class="tab-btn" onclick="showTab('tab-catalog')">📚 Catalogo Modelli</button>
     </div>
 
     <!-- TAB 1: PROVIDERS -->
@@ -370,6 +370,8 @@ pub fn render_dashboard() -> Html<&'static str> {
                 const orCount = data.openrouter_count || fullCatalog.filter(m => m.provider_name === 'openrouter').length;
                 const googCount = data.google_count || fullCatalog.filter(m => m.provider_name === 'google_aistudio').length;
                 document.getElementById('stat-models').innerHTML = `${fullCatalog.length} <span style="font-size:0.75rem; font-weight:normal; color:var(--muted);">(🪐 ${orCount} | ♊ ${googCount})</span>`;
+                const tabBtn = document.getElementById('tab-btn-catalog');
+                if (tabBtn) tabBtn.innerText = `📚 Catalogo Modelli (${fullCatalog.length})`;
                 filterCatalog();
             } catch(e) {
                 console.error("Errore caricamento catalogo:", e);
