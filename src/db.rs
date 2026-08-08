@@ -4,6 +4,45 @@ use std::str::FromStr;
 use tracing::info;
 use crate::types::{Provider, ProviderInput};
 
+pub fn mask_api_key(key: &str) -> String {
+    let trimmed = key.trim();
+    if trimmed.is_empty() {
+        return "".to_string();
+    }
+    if trimmed.contains("...") || trimmed.contains('•') {
+        return trimmed.to_string();
+    }
+    if trimmed.len() <= 8 {
+        return "••••••••".to_string();
+    }
+    let prefix = &trimmed[..4];
+    let suffix = &trimmed[trimmed.len() - 4..];
+    format!("{}...{}", prefix, suffix)
+}
+
+pub fn set_secure_file_permissions(path_str: &str) {
+    let path = std::path::Path::new(path_str);
+    if !path.exists() {
+        return;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = std::fs::metadata(path) {
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o600);
+            let _ = std::fs::set_permissions(path, perms);
+            info!("🔒 Permessi di sicurezza Unix 0600 applicati su {}", path_str);
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        info!("🔒 OS Windows rilevato: applicazione ACL di sicurezza utente su {}", path_str);
+    }
+}
+
 pub async fn init_db(database_url: &str) -> anyhow::Result<SqlitePool> {
     // Configura SQLite nativamente in WAL Mode per gestire letture e scritture concorrenti senza lock!
     let options = SqliteConnectOptions::from_str(database_url)?
@@ -17,6 +56,9 @@ pub async fn init_db(database_url: &str) -> anyhow::Result<SqlitePool> {
         .await?;
 
     info!("💾 SQLite connesso in WAL Mode (busy_timeout=5s)");
+
+    let clean_path = database_url.trim_start_matches("sqlite:").trim_start_matches("//");
+    set_secure_file_permissions(clean_path);
 
     // Creazione tabelle
     sqlx::query(
@@ -140,6 +182,25 @@ async fn seed_default_providers(pool: &SqlitePool) -> anyhow::Result<()> {
 }
 
 pub async fn insert_provider_db(pool: &SqlitePool, p: &ProviderInput) -> anyhow::Result<i64> {
+    let mut final_api_key = p.api_key.clone();
+
+    // Se la chiave è mascherata o vuota durante una modifica, preserviamo quella esistente nel DB!
+    if let Some(ref k) = final_api_key {
+        if k.contains("...") || k.contains('•') || k.trim().is_empty() {
+            let existing: Option<(Option<String>,)> = sqlx::query_as(
+                "SELECT api_key FROM providers WHERE name = ?"
+            )
+            .bind(&p.name)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
+
+            if let Some((Some(old_key),)) = existing {
+                final_api_key = Some(old_key);
+            }
+        }
+    }
+
     let tags_json = serde_json::to_string(&p.tags).unwrap_or_else(|_| "[]".to_string());
     let res = sqlx::query(
         "INSERT OR REPLACE INTO providers (name, base_url, api_key, auth_type, model, priority, tier, tags, tpm_limit, rpm_limit, enabled)
@@ -147,7 +208,7 @@ pub async fn insert_provider_db(pool: &SqlitePool, p: &ProviderInput) -> anyhow:
     )
     .bind(&p.name)
     .bind(&p.base_url)
-    .bind(&p.api_key)
+    .bind(&final_api_key)
     .bind(&p.auth_type)
     .bind(&p.model)
     .bind(p.priority as i64)

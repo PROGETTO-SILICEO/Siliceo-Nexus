@@ -62,9 +62,15 @@ pub fn render_dashboard() -> Html<&'static str> {
 <body>
     <div class="header">
         <h1>💎 Siliceo-Nexus <span style="font-size:0.8rem; color:var(--muted); font-weight:normal;">v0.1.0 (Port :8082)</span></h1>
-        <div class="node-status">
-            <span class="dot"></span>
-            <span>Tailscale GPU Node: <strong>100.98.20.76 (:8080)</strong></span>
+        <div style="display:flex; gap:12px; align-items:center;">
+            <div style="display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.05); padding:4px 10px; border-radius:6px; border:1px solid var(--border);">
+                <span style="font-size:0.8rem; color:var(--muted);">🔒 Admin Token:</span>
+                <input type="password" id="admin-token" placeholder="NEXUS_ADMIN_TOKEN (opzionale)" style="width:160px; padding:3px 8px; font-size:0.75rem;" oninput="localStorage.setItem('nexus_admin_token', this.value)">
+            </div>
+            <div class="node-status">
+                <span class="dot"></span>
+                <span>Tailscale GPU Node: <strong>100.98.20.76 (:8080)</strong></span>
+            </div>
         </div>
     </div>
 
@@ -426,6 +432,21 @@ pub fn render_dashboard() -> Html<&'static str> {
             }
         }
 
+        function getAuthHeaders() {
+            const tokenInput = document.getElementById('admin-token');
+            const token = (tokenInput && tokenInput.value) ? tokenInput.value : (localStorage.getItem('nexus_admin_token') || '');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token && token.trim()) {
+                headers['Authorization'] = 'Bearer ' + token.trim();
+            }
+            return headers;
+        }
+
+        if (localStorage.getItem('nexus_admin_token')) {
+            const tokenInput = document.getElementById('admin-token');
+            if (tokenInput) tokenInput.value = localStorage.getItem('nexus_admin_token');
+        }
+
         async function fetchLiveModelsFromEndpoint() {
             const baseUrl = document.getElementById('p-url').value;
             const apiKey = document.getElementById('p-key').value;
@@ -444,7 +465,7 @@ pub fn render_dashboard() -> Html<&'static str> {
             try {
                 const res = await fetch('/providers/fetch_models', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getAuthHeaders(),
                     body: JSON.stringify({ base_url: baseUrl, api_key: apiKey || null, provider_key: provKey })
                 });
 
@@ -581,7 +602,7 @@ pub fn render_dashboard() -> Html<&'static str> {
             const editId = document.getElementById('p-id').value;
             
             if (editId) {
-                await fetch(`/providers/${editId}`, { method: 'DELETE' });
+                await fetch(`/providers/${editId}`, { method: 'DELETE', headers: getAuthHeaders() });
             }
 
             const tags = document.getElementById('p-tags').value.split(',').map(t => t.trim()).filter(Boolean);
@@ -599,11 +620,17 @@ pub fn render_dashboard() -> Html<&'static str> {
                 enabled: true
             };
 
-            await fetch('/providers', {
+            const res = await fetch('/providers', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify(payload)
             });
+
+            if (!res.ok) {
+                const errData = await res.text();
+                alert("⚠️ Errore salvataggio provider: " + errData);
+                return;
+            }
 
             resetForm();
             loadProviders();
@@ -611,7 +638,12 @@ pub fn render_dashboard() -> Html<&'static str> {
 
         async function deleteProvider(id) {
             if (confirm("Vuoi rimuovere questo provider da Siliceo-Nexus?")) {
-                await fetch(`/providers/${id}`, { method: 'DELETE' });
+                const res = await fetch(`/providers/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+                if (!res.ok) {
+                    const errData = await res.text();
+                    alert("⚠️ Errore eliminazione provider: " + errData);
+                    return;
+                }
                 loadProviders();
             }
         }
