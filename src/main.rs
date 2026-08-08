@@ -204,10 +204,14 @@ async fn handle_get_catalog(
 async fn handle_sync_catalog(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let count = catalog::sync_openrouter_catalog(&state.client, &state.db).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let (or_count, google_count) = catalog::sync_all_catalogs(&state.client, &state.db).await;
 
-    Ok(Json(serde_json::json!({ "status": "synced", "count": count })))
+    Ok(Json(serde_json::json!({
+        "status": "synced",
+        "openrouter_count": or_count,
+        "google_count": google_count,
+        "total_count": or_count + google_count
+    })))
 }
 
 async fn handle_test_provider(
