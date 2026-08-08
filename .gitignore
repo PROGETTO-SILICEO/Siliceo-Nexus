@@ -1,1 +1,9 @@
 /target
+/data/*.db
+/data/*.db-wal
+/data/*.db-shm
+/data/*.db-journal
+*.log
+.env
+.env.*
+!.env.example
