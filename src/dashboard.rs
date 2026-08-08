@@ -321,12 +321,12 @@ pub fn render_dashboard() -> Html<&'static str> {
             },
             agnes: {
                 key: "agnes",
-                name: "agnes-ai-local",
-                url: "http://100.98.20.76:8080/v1",
-                tier: "local",
+                name: "agnes-ai-singapore",
+                url: "https://apihub.agnes-ai.com/v1",
+                tier: "free",
                 priority: 1,
-                tags: "agnes_ai, tailscale, local_node",
-                default_model: "agnes-coder-v1"
+                tags: "agnes_ai, omni_modal, singapore_cloud, free_api",
+                default_model: "agnes-v1"
             },
             mistral: {
                 key: "mistral",
@@ -418,6 +418,7 @@ pub fn render_dashboard() -> Html<&'static str> {
             else if (trimmed.startsWith('pplx-')) detectedPreset = 'perplexity';
             else if (trimmed.startsWith('csk-')) detectedPreset = 'cerebras';
             else if (trimmed.startsWith('fw_')) detectedPreset = 'inception';
+            else if (trimmed.includes('agnes')) detectedPreset = 'agnes';
 
             if (detectedPreset) {
                 document.getElementById('p-preset').value = detectedPreset;
