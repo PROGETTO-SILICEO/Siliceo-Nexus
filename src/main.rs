@@ -70,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
         // Management API
         .route("/providers", get(list_providers).post(create_provider))
         .route("/providers/:id", delete(delete_provider))
+        .route("/providers/:id/test", post(handle_test_provider))
         // Catalog API
         .route("/catalog", get(handle_get_catalog))
         .route("/catalog/sync", post(handle_sync_catalog))
@@ -207,4 +208,57 @@ async fn handle_sync_catalog(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(serde_json::json!({ "status": "synced", "count": count })))
+}
+
+async fn handle_test_provider(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let list = state.providers.read().await;
+    let target = list.iter().find(|p| p.id == Some(id))
+        .cloned()
+        .ok_or((StatusCode::NOT_FOUND, "Provider non trovato".to_string()))?;
+
+    drop(list);
+
+    let test_req = LLMRequest {
+        model: Some(target.model.clone()),
+        messages: vec![
+            types::Message {
+                role: "user".to_string(),
+                content: "Test di connettività Siliceo-Nexus. Rispondi 'OK'".to_string(),
+            }
+        ],
+        temperature: Some(0.1),
+        max_tokens: Some(50),
+        tools: None,
+        stream: None,
+    };
+
+    let start = std::time::Instant::now();
+    match adapters::dispatch_request(&state.client, &target, &test_req).await {
+        Ok(res) => {
+            let elapsed_ms = start.elapsed().as_millis();
+            let content = res.choices.first()
+                .map(|c| c.message.content.clone())
+                .unwrap_or_else(|| "Nessuna risposta".to_string());
+
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "provider_name": target.name,
+                "model_used": target.model,
+                "latency_ms": elapsed_ms,
+                "content": content
+            })))
+        }
+        Err(e) => {
+            let elapsed_ms = start.elapsed().as_millis();
+            Ok(Json(serde_json::json!({
+                "success": false,
+                "provider_name": target.name,
+                "latency_ms": elapsed_ms,
+                "error": e.to_string()
+            })))
+        }
+    }
 }
