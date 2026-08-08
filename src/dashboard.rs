@@ -1,7 +1,7 @@
 use axum::response::Html;
 
 pub fn render_dashboard() -> Html<&'static str> {
-    Html(r#"<!DOCTYPE html>
+    Html(r##"<!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
@@ -41,12 +41,31 @@ pub fn render_dashboard() -> Html<&'static str> {
         .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
 
         /* Stats Grid */
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 24px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 20px; }
         .stat-card { background: var(--panel); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden; }
         .stat-card::before { content: ''; position: absolute; top:0; left:0; width: 100%; height: 2px; background: linear-gradient(90deg, var(--primary), transparent); }
         .stat-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); font-weight: 600; }
         .stat-val { font-size: 1.8rem; font-weight: 800; color: var(--text); margin-top: 6px; display: flex; align-items: baseline; gap: 8px; }
         .stat-val span.sub { font-size: 0.8rem; font-weight: 500; color: var(--success); }
+
+        /* Real-Time Telemetry Panel */
+        .telemetry-panel { background: var(--panel); border: 1px solid var(--card-border); border-radius: 14px; padding: 20px; margin-bottom: 24px; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+        .telemetry-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; }
+        .telemetry-title { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 700; color: var(--primary); letter-spacing: 0.5px; }
+        .live-pulse { width: 8px; height: 8px; background: var(--success); border-radius: 50%; display: inline-block; box-shadow: 0 0 10px var(--success); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+        
+        .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .telemetry-box { background: var(--bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 14px 16px; }
+        .telemetry-label { font-size: 0.72rem; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px; display: flex; justify-content: space-between; }
+        
+        .gauge-bar { height: 10px; background: rgba(255,255,255,0.05); border-radius: 6px; overflow: hidden; border: 1px solid var(--card-border); }
+        .gauge-fill { height: 100%; width: 45%; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width 0.5s ease; border-radius: 6px; }
+        
+        .sparkline-box { display: flex; align-items: flex-end; gap: 4px; height: 32px; padding-top: 4px; }
+        .spark-bar { flex: 1; background: rgba(56, 189, 248, 0.3); border-radius: 3px; transition: height 0.3s ease; }
+        .spark-bar.high { background: var(--accent); }
+        .spark-bar.active { background: var(--primary); box-shadow: 0 0 6px var(--primary); }
 
         /* Navigation Tabs */
         .nav-tabs { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--card-border); padding-bottom: 12px; margin-bottom: 24px; }
@@ -147,6 +166,48 @@ pub fn render_dashboard() -> Html<&'static str> {
         <div class="stat-card">
             <div class="stat-label">Gateway Uptime</div>
             <div class="stat-val" style="color:var(--success);">99.8% <span class="sub">30 Days</span></div>
+        </div>
+    <!-- Real-Time Telemetry & GPU Load Panel -->
+    <div class="telemetry-panel">
+        <div class="telemetry-header">
+            <div class="telemetry-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                <span>LIVE HARDWARE & GATEWAY TELEMETRY</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:0.75rem; color:var(--muted); font-family:monospace;">
+                <span class="live-pulse"></span> SYSTEM POLLING (2s)
+            </div>
+        </div>
+        <div class="telemetry-grid">
+            <div class="telemetry-box">
+                <div class="telemetry-label">
+                    <span>RTX 2070 GPU & SYSTEM LOAD</span>
+                    <strong id="telemetry-gpu-pct" style="color:var(--primary);">45%</strong>
+                </div>
+                <div class="gauge-bar">
+                    <div class="gauge-fill" id="telemetry-gpu-bar" style="width: 45%;"></div>
+                </div>
+                <div style="font-size:0.72rem; color:var(--muted); margin-top:6px; font-family:monospace; display:flex; justify-content:space-between;">
+                    <span>Node: beellama-tailscale-2070</span>
+                    <span id="telemetry-mem-val">RAM: 42%</span>
+                </div>
+            </div>
+            <div class="telemetry-box">
+                <div class="telemetry-label">
+                    <span>LATENCY SPARKLINE (MS)</span>
+                    <strong id="telemetry-latency-val" style="color:var(--success);">14 ms</strong>
+                </div>
+                <div class="sparkline-box" id="telemetry-sparkline">
+                    <div class="spark-bar" style="height: 40%;"></div>
+                    <div class="spark-bar" style="height: 60%;"></div>
+                    <div class="spark-bar" style="height: 35%;"></div>
+                    <div class="spark-bar" style="height: 50%;"></div>
+                    <div class="spark-bar" style="height: 75%;"></div>
+                    <div class="spark-bar" style="height: 45%;"></div>
+                    <div class="spark-bar" style="height: 90%;"></div>
+                    <div class="spark-bar active" style="height: 55%;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -778,9 +839,46 @@ pub fn render_dashboard() -> Html<&'static str> {
             loadCatalog();
         }
 
+        let sparklineHistory = [40, 55, 30, 60, 45, 80, 50, 65];
+
+        async function loadLiveStats() {
+            try {
+                const res = await fetch('/stats');
+                const data = await res.json();
+                if (data) {
+                    if (data.gpu_utilization_pct !== undefined) {
+                        document.getElementById('telemetry-gpu-pct').innerText = data.gpu_utilization_pct + '%';
+                        document.getElementById('telemetry-gpu-bar').style.width = data.gpu_utilization_pct + '%';
+                    }
+                    if (data.system_memory_used_pct !== undefined) {
+                        document.getElementById('telemetry-mem-val').innerText = 'RAM: ' + data.system_memory_used_pct + '%';
+                    }
+                    if (data.last_latency_ms !== undefined) {
+                        document.getElementById('telemetry-latency-val').innerText = data.last_latency_ms + ' ms';
+                        sparklineHistory.shift();
+                        sparklineHistory.push(Math.min(100, Math.max(15, data.last_latency_ms)));
+
+                        const sparkBox = document.getElementById('telemetry-sparkline');
+                        if (sparkBox) {
+                            sparkBox.innerHTML = '';
+                            sparklineHistory.forEach((val, idx) => {
+                                const isLast = idx === sparklineHistory.length - 1;
+                                const cls = isLast ? 'spark-bar active' : (val > 60 ? 'spark-bar high' : 'spark-bar');
+                                sparkBox.innerHTML += `<div class="${cls}" style="height:${val}%;"></div>`;
+                            });
+                        }
+                    }
+                }
+            } catch(e) {
+                console.error("Errore telemetria:", e);
+            }
+        }
+
         loadProviders();
         loadCatalog();
+        loadLiveStats();
+        setInterval(loadLiveStats, 2000);
     </script>
 </body>
-</html>"#)
+</html>"##)
 }
