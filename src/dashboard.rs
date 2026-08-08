@@ -212,7 +212,7 @@ pub fn render_dashboard() -> Html<&'static str> {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             event.target.classList.add('active');
             document.getElementById(tabId).classList.add('active');
-            if (tabId === 'tab-catalog' && fullCatalog.length === 0) {
+            if (tabId === 'tab-catalog') {
                 loadCatalog();
             }
         }
