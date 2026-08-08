@@ -155,18 +155,20 @@ pub fn render_dashboard() -> Html<&'static str> {
                     <button type="button" class="btn-secondary" id="btn-cancel" style="display:none;" onclick="resetForm()">Annulla</button>
                 </form>
             </div>
-        </div>
-    </div>
-
-    <!-- TAB 2: CATALOGO MODELLI -->
+          <!-- TAB 2: CATALOGO MODELLI -->
     <div id="tab-catalog" class="tab-content">
         <div class="card">
-            <h2>📚 Catalogo Ufficiale Modelli OpenRouter (Sincronizzato 24h) 
-                <button onclick="syncCatalog()">🔄 Sincronizza Ora</button>
+            <h2>📚 Catalogo Modelli Multi-Provider (Sincronizzato 24h) 
+                <button onclick="syncCatalog()">🔄 Sincronizza Cataloghi Ora</button>
             </h2>
-            <div style="display:flex; gap:15px; margin-bottom:15px;">
-                <input type="text" id="catalog-search" placeholder="🔍 Cerca modello (es. qwen, llama, deepseek, free)..." oninput="filterCatalog()">
-                <select id="catalog-filter" onchange="filterCatalog()" style="width:200px;">
+            <div style="display:flex; flex-wrap:wrap; gap:15px; margin-bottom:15px; align-items:center;">
+                <div style="display:flex; gap:6px;">
+                    <button id="btn-src-all" class="btn-secondary" style="font-size:0.8rem; background:var(--primary); color:#000;" onclick="setCatalogSource('all')">🌐 Tutti</button>
+                    <button id="btn-src-openrouter" class="btn-secondary" style="font-size:0.8rem;" onclick="setCatalogSource('openrouter')">🪐 OpenRouter</button>
+                    <button id="btn-src-google" class="btn-secondary" style="font-size:0.8rem;" onclick="setCatalogSource('google_aistudio')">♊ Google AI Studio</button>
+                </div>
+                <input type="text" id="catalog-search" style="flex:1; min-width:200px;" placeholder="🔍 Cerca modello (es. gemini, qwen, llama, deepseek, free)..." oninput="filterCatalog()">
+                <select id="catalog-filter" onchange="filterCatalog()" style="width:180px;">
                     <option value="all">Tutti i Modelli</option>
                     <option value="free" selected>Solo 100% Free ($0.00)</option>
                 </select>
@@ -175,6 +177,7 @@ pub fn render_dashboard() -> Html<&'static str> {
                 <thead>
                     <tr>
                         <th>ID Modello</th>
+                        <th>Sorgente</th>
                         <th>Costo Prompt / 1M</th>
                         <th>Costo Comp / 1M</th>
                         <th>Contesto</th>
@@ -183,7 +186,7 @@ pub fn render_dashboard() -> Html<&'static str> {
                     </tr>
                 </thead>
                 <tbody id="catalog-body">
-                    <tr><td colspan="6" style="color:var(--muted); text-align:center;">Caricamento catalogo...</td></tr>
+                    <tr><td colspan="7" style="color:var(--muted); text-align:center;">Caricamento catalogo...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -202,6 +205,7 @@ pub fn render_dashboard() -> Html<&'static str> {
     <script>
         let fullCatalog = [];
         let loadedProvidersList = [];
+        let currentCatalogSource = 'all';
 
         function showTab(tabId) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -370,6 +374,25 @@ pub fn render_dashboard() -> Html<&'static str> {
             }
         }
 
+        function setCatalogSource(source) {
+            currentCatalogSource = source;
+            ['btn-src-all', 'btn-src-openrouter', 'btn-src-google'].forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.style.background = 'var(--border)';
+                    btn.style.color = 'var(--text)';
+                }
+            });
+            const activeBtn = document.getElementById(
+                source === 'all' ? 'btn-src-all' : (source === 'openrouter' ? 'btn-src-openrouter' : 'btn-src-google')
+            );
+            if (activeBtn) {
+                activeBtn.style.background = 'var(--primary)';
+                activeBtn.style.color = '#000';
+            }
+            filterCatalog();
+        }
+
         function filterCatalog() {
             const query = document.getElementById('catalog-search').value.toLowerCase();
             const filterType = document.getElementById('catalog-filter').value;
@@ -379,43 +402,55 @@ pub fn render_dashboard() -> Html<&'static str> {
             const filtered = fullCatalog.filter(m => {
                 const matchesQuery = m.model_id.toLowerCase().includes(query);
                 const matchesFilter = filterType === 'all' || (filterType === 'free' && m.is_free);
-                return matchesQuery && matchesFilter;
+                const matchesSource = currentCatalogSource === 'all' || m.provider_name === currentCatalogSource;
+                return matchesQuery && matchesFilter && matchesSource;
             });
 
             if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted); text-align:center;">Nessun modello trovato nel catalogo.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted); text-align:center;">Nessun modello trovato per i filtri selezionati.</td></tr>';
                 return;
             }
 
-            filtered.slice(0, 100).forEach(m => {
+            filtered.slice(0, 150).forEach(m => {
                 const isFreeBadge = m.is_free ? '<span class="badge badge-free">FREE</span>' : '<span class="badge badge-paid">PAID</span>';
+                const sourceBadge = m.provider_name === 'google_aistudio'
+                    ? '<span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">♊ Google</span>'
+                    : '<span class="badge" style="background:rgba(129,140,248,0.2); color:#818cf8;">🪐 OpenRouter</span>';
                 const ctx = (m.context_length / 1024).toFixed(0) + 'k';
                 tbody.innerHTML += `
                     <tr>
                         <td><code>${m.model_id}</code></td>
+                        <td>${sourceBadge}</td>
                         <td>$${m.prompt_cost_per_1m.toFixed(4)}</td>
                         <td>$${m.completion_cost_per_1m.toFixed(4)}</td>
                         <td>${ctx} tokens</td>
                         <td>${isFreeBadge}</td>
                         <td>
-                            <button class="btn-secondary" style="padding:3px 8px; font-size:0.75rem;" onclick="useModelInForm('${m.model_id}')">➕ Usa</button>
+                            <button class="btn-secondary" style="padding:3px 8px; font-size:0.75rem;" onclick="useModelInForm('${m.model_id}', '${m.provider_name}')">➕ Usa</button>
                         </td>
                     </tr>
                 `;
             });
         }
 
-        function useModelInForm(modelId) {
+        function useModelInForm(modelId, providerName) {
             showTab('tab-providers');
             document.getElementById('p-model').value = modelId;
-            if (modelId.includes(':free')) {
+            if (providerName === 'google_aistudio') {
+                document.getElementById('p-name').value = 'gemini-free-tier';
+                document.getElementById('p-url').value = 'https://generativelanguage.googleapis.com/v1beta/openai';
+                document.getElementById('p-tier').value = 'free';
+                document.getElementById('p-tags').value = 'chitchat, coding, fast, cloud_free, tool_supported';
+            } else if (modelId.includes(':free')) {
                 document.getElementById('p-tier').value = 'free';
             }
         }
 
         async function syncCatalog() {
-            alert("🔄 Sincronizzazione catalogo OpenRouter avviata...");
-            await fetch('/catalog/sync', { method: 'POST' });
+            alert("🔄 Sincronizzazione cataloghi (OpenRouter + Google AI Studio) avviata...");
+            const res = await fetch('/catalog/sync', { method: 'POST' });
+            const data = await res.json();
+            alert(`✅ Sincronizzazione completata!\n• OpenRouter: ${data.openrouter_count} modelli\n• Google AI Studio: ${data.google_count} modelli`);
             loadCatalog();
         }
 

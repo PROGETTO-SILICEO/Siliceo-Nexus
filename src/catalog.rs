@@ -21,7 +21,21 @@ struct OpenRouterPricing {
     completion: Option<String>,
 }
 
-/// Scarica ed aggiorna la tabella models_catalog con i dati ufficiali di OpenRouter (costi per 1M token, context size, etc.)
+#[derive(Debug, Deserialize)]
+struct GoogleModelsResponse {
+    models: Vec<GoogleModelItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GoogleModelItem {
+    name: String,
+    #[serde(rename = "displayName")]
+    _display_name: Option<String>,
+    #[serde(rename = "inputTokenLimit")]
+    input_token_limit: Option<u32>,
+}
+
+/// Scarica ed aggiorna la tabella models_catalog con i dati ufficiali di OpenRouter
 pub async fn sync_openrouter_catalog(client: &reqwest::Client, pool: &SqlitePool) -> anyhow::Result<usize> {
     info!("🔄 Download catalogo modelli aggiornato da OpenRouter...");
 
@@ -73,17 +87,88 @@ pub async fn sync_openrouter_catalog(client: &reqwest::Client, pool: &SqlitePool
         }
     }
 
-    info!("✅ Catalogo modelli aggiornato nel DB: {} modelli registrati", updated_count);
+    info!("✅ Catalogo OpenRouter aggiornato nel DB: {} modelli", updated_count);
     Ok(updated_count)
+}
+
+/// Scarica ed aggiorna la tabella models_catalog con i modelli ufficiali di Google AI Studio
+pub async fn sync_google_catalog(client: &reqwest::Client, pool: &SqlitePool) -> anyhow::Result<usize> {
+    info!("🔄 Download catalogo modelli aggiornato da Google AI Studio...");
+
+    // Cerca la chiave Gemini dalle env o dal database dei provider
+    let mut api_key = std::env::var("GEMINI_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+        let row: Option<(Option<String>,)> = sqlx::query_as(
+            "SELECT api_key FROM providers WHERE name = 'gemini-free-tier' OR base_url LIKE '%generativelanguage.googleapis.com%' LIMIT 1"
+        )
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+
+        if let Some((Some(k),)) = row {
+            api_key = k;
+        }
+    }
+
+    if api_key.is_empty() {
+        warn!("⚠️ Nessuna GEMINI_API_KEY trovata per il sync del catalogo Google AI Studio.");
+        return Ok(0);
+    }
+
+    let url = format!("https://generativelanguage.googleapis.com/v1beta/models?key={}", api_key);
+    let resp = client.get(&url)
+        .timeout(std::time::Duration::from_secs(20))
+        .send()
+        .await?;
+
+    if !resp.status().is_success() {
+        anyhow::bail!("Google AI Studio models API error status: {}", resp.status());
+    }
+
+    let catalog_data: GoogleModelsResponse = resp.json().await?;
+    let mut updated_count = 0;
+
+    for item in catalog_data.models {
+        let clean_id = item.name.trim_start_matches("models/").to_string();
+        let context_len = item.input_token_limit.unwrap_or(1048576);
+
+        let res = sqlx::query(
+            "INSERT OR REPLACE INTO models_catalog 
+             (provider_name, model_id, prompt_cost_per_1m, completion_cost_per_1m, context_length, is_free, capabilities, last_updated)
+             VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))"
+        )
+        .bind("google_aistudio")
+        .bind(&clean_id)
+        .bind(0.0f64) // Free tier default per studio
+        .bind(0.0f64)
+        .bind(context_len as i64)
+        .bind(1i64) // Free tier
+        .bind("[\"text\", \"chat\", \"multimodal\"]")
+        .execute(pool)
+        .await;
+
+        if res.is_ok() {
+            updated_count += 1;
+        }
+    }
+
+    info!("✅ Catalogo Google AI Studio aggiornato nel DB: {} modelli", updated_count);
+    Ok(updated_count)
+}
+
+/// Sincronizza tutti i cataloghi supportati (OpenRouter + Google AI Studio)
+pub async fn sync_all_catalogs(client: &reqwest::Client, pool: &SqlitePool) -> (usize, usize) {
+    let or_count = sync_openrouter_catalog(client, pool).await.unwrap_or(0);
+    let goog_count = sync_google_catalog(client, pool).await.unwrap_or(0);
+    (or_count, goog_count)
 }
 
 /// Task in background che esegue il refresh del catalogo all'avvio e ogni 24 ore
 pub fn spawn_catalog_sync_loop(client: reqwest::Client, pool: SqlitePool) {
     tokio::spawn(async move {
         loop {
-            if let Err(e) = sync_openrouter_catalog(&client, &pool).await {
-                error!("❌ Sincronizzazione catalogo modelli fallita: {}", e);
-            }
+            let (or, goog) = sync_all_catalogs(&client, &pool).await;
+            info!("📊 Background Catalog Sync completato: OpenRouter={}, Google={}", or, goog);
             // Attende 24 ore prima del prossimo sync
             tokio::time::sleep(std::time::Duration::from_secs(86400)).await;
         }
