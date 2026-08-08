@@ -43,6 +43,12 @@ pub fn set_secure_file_permissions(path_str: &str) {
     }
 }
 
+fn set_secure_database_permissions(database_path: &str) {
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        set_secure_file_permissions(&format!("{}{}", database_path, suffix));
+    }
+}
+
 pub async fn init_db(database_url: &str) -> anyhow::Result<SqlitePool> {
     // Configura SQLite nativamente in WAL Mode per gestire letture e scritture concorrenti senza lock!
     let options = SqliteConnectOptions::from_str(database_url)?
@@ -58,7 +64,7 @@ pub async fn init_db(database_url: &str) -> anyhow::Result<SqlitePool> {
     info!("💾 SQLite connesso in WAL Mode (busy_timeout=5s)");
 
     let clean_path = database_url.trim_start_matches("sqlite:").trim_start_matches("//");
-    set_secure_file_permissions(clean_path);
+    set_secure_database_permissions(clean_path);
 
     // Creazione tabelle
     sqlx::query(
@@ -117,6 +123,7 @@ pub async fn init_db(database_url: &str) -> anyhow::Result<SqlitePool> {
 
     // Seed iniziale se il DB è vuoto
     seed_default_providers(&pool).await?;
+    set_secure_database_permissions(clean_path);
 
     Ok(pool)
 }
