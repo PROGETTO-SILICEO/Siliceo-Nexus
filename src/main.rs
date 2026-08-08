@@ -79,6 +79,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/providers/fetch_models", post(handle_fetch_models))
         .route("/providers/:id", delete(delete_provider))
         .route("/providers/:id/test", post(handle_test_provider))
+        .route("/providers/:id/set_model", post(handle_set_provider_model))
         // Catalog API
         .route("/catalog", get(handle_get_catalog))
         .route("/catalog/sync", post(handle_sync_catalog))
@@ -586,6 +587,34 @@ async fn handle_test_provider(
 }
 
 #[derive(serde::Deserialize)]
+pub struct SetModelPayload {
+    pub model: String,
+}
+
+async fn handle_set_provider_model(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(id): Path<i64>,
+    Json(payload): Json<SetModelPayload>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    verify_admin_auth(&headers)?;
+
+    sqlx::query("UPDATE providers SET model = ? WHERE id = ?")
+        .bind(&payload.model)
+        .bind(id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let updated = db::load_all_providers(&state.db).await;
+    let mut lock = state.providers.write().await;
+    *lock = updated;
+
+    info!("🔄 Modello provider id={} aggiornato a caldo in '{}'", id, payload.model);
+    Ok(Json(serde_json::json!({ "id": id, "model": payload.model, "status": "updated" })))
+}
+
+#[derive(serde::Deserialize)]
 pub struct FetchModelsPayload {
     pub base_url: String,
     pub api_key: Option<String>,
@@ -632,11 +661,17 @@ async fn handle_fetch_models(
     }
 
     let mut url = payload.base_url.trim_end_matches('/').to_string();
-    if !url.ends_with("/models") {
-        if !url.ends_with("/v1") && !url.ends_with("/v1beta") && !url.ends_with("/openai") {
-            url.push_str("/v1");
+    let is_ollama_native = url.ends_with("/api") || url.contains(":11434");
+
+    if !url.ends_with("/models") && !url.ends_with("/tags") {
+        if is_ollama_native {
+            url.push_str("/api/tags");
+        } else {
+            if !url.ends_with("/v1") && !url.ends_with("/v1beta") && !url.ends_with("/openai") {
+                url.push_str("/v1");
+            }
+            url.push_str("/models");
         }
-        url.push_str("/models");
     }
 
     let mut req = state.client.get(&url);
@@ -664,6 +699,8 @@ async fn handle_fetch_models(
         for m in data {
             if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
                 model_ids.push(id.to_string());
+            } else if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
+                model_ids.push(name.trim_start_matches("models/").to_string());
             }
         }
     } else if let Some(models) = body.get("models").and_then(|m| m.as_array()) {
@@ -671,6 +708,10 @@ async fn handle_fetch_models(
             if let Some(name) = m.get("name").and_then(|n| n.as_str()) {
                 let clean = name.trim_start_matches("models/").to_string();
                 model_ids.push(clean);
+            } else if let Some(id) = m.get("id").and_then(|i| i.as_str()) {
+                model_ids.push(id.to_string());
+            } else if let Some(model) = m.get("model").and_then(|i| i.as_str()) {
+                model_ids.push(model.to_string());
             }
         }
     }

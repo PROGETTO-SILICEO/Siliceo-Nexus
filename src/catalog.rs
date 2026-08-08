@@ -51,6 +51,8 @@ pub async fn sync_openrouter_catalog(client: &reqwest::Client, pool: &SqlitePool
     let catalog_data: OpenRouterModelsResponse = resp.json().await?;
     let mut updated_count = 0;
 
+    let mut tx = pool.begin().await?;
+
     for item in catalog_data.data {
         let prompt_cost_1m = item.pricing.as_ref()
             .and_then(|p| p.prompt.as_deref())
@@ -79,13 +81,15 @@ pub async fn sync_openrouter_catalog(client: &reqwest::Client, pool: &SqlitePool
         .bind(context_len as i64)
         .bind(if is_free { 1i64 } else { 0i64 })
         .bind("[\"text\", \"chat\"]")
-        .execute(pool)
+        .execute(&mut *tx)
         .await;
 
         if res.is_ok() {
             updated_count += 1;
         }
     }
+
+    tx.commit().await?;
 
     info!("✅ Catalogo OpenRouter aggiornato nel DB: {} modelli", updated_count);
     Ok(updated_count)
@@ -128,6 +132,8 @@ pub async fn sync_google_catalog(client: &reqwest::Client, pool: &SqlitePool) ->
     let catalog_data: GoogleModelsResponse = resp.json().await?;
     let mut updated_count = 0;
 
+    let mut tx = pool.begin().await?;
+
     for item in catalog_data.models {
         let clean_id = item.name.trim_start_matches("models/").to_string();
         let context_len = item.input_token_limit.unwrap_or(1048576);
@@ -144,13 +150,15 @@ pub async fn sync_google_catalog(client: &reqwest::Client, pool: &SqlitePool) ->
         .bind(context_len as i64)
         .bind(1i64) // Free tier
         .bind("[\"text\", \"chat\", \"multimodal\"]")
-        .execute(pool)
+        .execute(&mut *tx)
         .await;
 
         if res.is_ok() {
             updated_count += 1;
         }
     }
+
+    tx.commit().await?;
 
     info!("✅ Catalogo Google AI Studio aggiornato nel DB: {} modelli", updated_count);
     Ok(updated_count)
