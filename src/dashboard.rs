@@ -624,6 +624,7 @@ pub fn render_dashboard() -> Html<&'static str> {
                             </div>
                             <div class="card-actions">
                                 <button class="btn-test" onclick="testProvider(${p.id})">🧪 Test</button>
+                                <button style="color:var(--primary); border-color:rgba(56,189,248,0.3);" onclick="promptChangeModel(${p.id})">🔄 Modello</button>
                                 <button onclick="editProvider(${p.id})">✏️ Modifica</button>
                                 <button class="btn-danger" onclick="deleteProvider(${p.id})">🗑️ Elimina</button>
                             </div>
@@ -632,6 +633,47 @@ pub fn render_dashboard() -> Html<&'static str> {
                 });
             } catch(e) {
                 console.error("Errore caricamento provider:", e);
+            }
+        }
+
+        async function promptChangeModel(id) {
+            const p = loadedProvidersList.find(x => x.id === id);
+            if (!p) return;
+
+            let modelList = [p.model];
+            try {
+                const res = await fetch('/providers/fetch_models', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        base_url: p.base_url,
+                        api_key: p.api_key || null,
+                        provider_id: p.id,
+                        provider_name: p.name
+                    })
+                });
+                const data = await res.json();
+                if (data && data.models && data.models.length > 0) {
+                    modelList = data.models;
+                }
+            } catch(e) {
+                console.log("Autodiscovery rapido non disponibile, continuo con input manuale:", e);
+            }
+
+            const chosen = prompt(`⚡ CAMBIO MODELLO A CALDO per '${p.name}'\nModello Attuale: ${p.model}\n\nModelli Disponibili dall'Endpoint (${modelList.length}):\n• ${modelList.slice(0, 12).join('\n• ')}\n\nDigita o incolla il nuovo modello desiderato:`, p.model);
+
+            if (chosen && chosen.trim() && chosen.trim() !== p.model) {
+                const updateRes = await fetch(`/providers/${p.id}/set_model`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ model: chosen.trim() })
+                });
+                if (updateRes.ok) {
+                    alert(`✅ Modello di '${p.name}' aggiornato a caldo in '${chosen.trim()}'!`);
+                    loadProviders();
+                } else {
+                    alert("⚠️ Errore nell'aggiornamento del modello.");
+                }
             }
         }
 
