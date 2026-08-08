@@ -447,7 +447,15 @@ pub fn render_dashboard() -> Html<&'static str> {
                     })
                 });
 
-                const data = await res.json();
+                let data;
+                const contentType = res.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    data = await res.json();
+                } else {
+                    const textErr = await res.text();
+                    data = { success: false, error: textErr };
+                }
+
                 if (res.ok && data.models && data.models.length > 0) {
                     modelSelect.innerHTML = '<option value="">-- Seleziona uno dei ' + data.models.length + ' modelli rilevati dal vivo --</option>';
                     data.models.forEach(m => {
@@ -462,7 +470,7 @@ pub fn render_dashboard() -> Html<&'static str> {
                     modelInput.placeholder = "qwen/qwen-2.5-coder-32b:free";
                 }
             } catch(e) {
-                alert("⚠️ Errore di connessione all'endpoint: " + e);
+                alert("⚠️ Errore di connettività durante il rilevamento: " + e.message);
                 modelInput.placeholder = "qwen/qwen-2.5-coder-32b:free";
             }
         }
