@@ -75,6 +75,32 @@ The integrated Web SPA provides complete governance over your inference infrastr
 3. **Multi-Key Management**: Pair multiple keys for the same provider (e.g. `KEY_1, KEY_2, KEY_3`).
 4. **Dynamic Catalog Tabs**: Switch between provider catalogs (Google AI Studio, OpenRouter, Groq, etc.).
 
+## 🔌 Connecting Claude Code, Cursor & Aider
+
+Siliceo-Nexus works seamlessly with **Claude Code**, **Cursor**, **Aider**, **Windsurf**, and **Claude CLI**.
+
+### 1. Claude Code CLI Integration
+To direct **Claude Code** through Siliceo-Nexus (`:8082`):
+
+```bash
+# Set environment variables in your terminal
+export ANTHROPIC_BASE_URL="http://localhost:8082/v1"
+export ANTHROPIC_API_KEY="nexus-local"
+
+# Launch Claude Code — all prompts will route through Siliceo-Nexus
+claude
+```
+
+**Pro Tip (One-Liner Alias)**: Add to `~/.bashrc` or `~/.zshrc`:
+```bash
+alias claude-nexus='ANTHROPIC_BASE_URL="http://localhost:8082/v1" ANTHROPIC_API_KEY="nexus-local" claude'
+```
+
+### 2. Cursor / Windsurf IDE Setup
+In Cursor / Windsurf settings:
+- **OpenAI API Key**: `nexus-local`
+- **Override OpenAI Base URL**: `http://localhost:8082/v1`
+
 ---
 
 ## 📡 API Reference
