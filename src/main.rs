@@ -7,13 +7,14 @@ use axum::{
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, error};
+use tracing::{info, warn, error};
 
 mod types;
 mod db;
 mod router;
 mod adapters;
 mod dashboard;
+mod catalog;
 
 use types::{Provider, ProviderInput, LLMRequest, LLMResponse};
 
@@ -53,10 +54,13 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let state = AppState {
-        db,
+        db: db.clone(),
         providers: Arc::new(RwLock::new(providers_list)),
         client: reqwest::Client::new(),
     };
+
+    // Avvia il loop di aggiornamento catalogo modelli in background (OpenRouter 24h sync)
+    catalog::spawn_catalog_sync_loop(state.client.clone(), state.db.clone());
 
     let app = Router::new()
         // Dashboard SPA
@@ -66,6 +70,9 @@ async fn main() -> anyhow::Result<()> {
         // Management API
         .route("/providers", get(list_providers).post(create_provider))
         .route("/providers/:id", delete(delete_provider))
+        // Catalog API
+        .route("/catalog", get(handle_get_catalog))
+        .route("/catalog/sync", post(handle_sync_catalog))
         // Health
         .route("/health", get(handle_health))
         .with_state(state);
@@ -102,22 +109,31 @@ async fn handle_chat_completions(
     let intent = router::classify_intent(&request);
     let requires_tools = request.tools.is_some();
 
-    // 2. Selezione dinamica del provider idoneo
-    let selected_provider = router::select_provider(&state.providers, intent, requires_tools).await
-        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+    // 2. Ottieni tutti i provider idonei ordinati per priorità per la cascata di failover
+    let eligible = router::select_eligible_providers(&state.providers, intent, requires_tools).await;
+    if eligible.is_empty() {
+        return Err((StatusCode::SERVICE_UNAVAILABLE, "Nessun provider LLM disponibile".to_string()));
+    }
 
-    // 3. Dispatching della richiesta
-    match adapters::dispatch_request(&state.client, &selected_provider, &request).await {
-        Ok(response) => {
-            info!("✅ Response delivered from provider '{}' (model: {})", selected_provider.name, response.model);
-            Ok(Json(response))
-        }
-        Err(e) => {
-            error!("❌ Provider '{}' failed: {}. Triggering failover...", selected_provider.name, e);
-            // Cooldown temporaneo per provider rotto
-            Err((StatusCode::BAD_GATEWAY, format!("Provider error: {}", e)))
+    let mut last_error = String::new();
+
+    // 3. Cascata di Failover Sequenziale
+    for p in &eligible {
+        info!("🚀 Tentativo con provider '{}' (model: {})", p.name, p.model);
+        match adapters::dispatch_request(&state.client, p, &request).await {
+            Ok(response) => {
+                info!("✅ Risposta consegnata da '{}' (model: {})", p.name, response.model);
+                return Ok(Json(response));
+            }
+            Err(e) => {
+                warn!("⚠️ Provider '{}' fallito: {}. Passo al candidato successivo...", p.name, e);
+                last_error = e.to_string();
+            }
         }
     }
+
+    error!("❌ Tutti i provider della cascata sono falliti. Ultimo errore: {}", last_error);
+    Err((StatusCode::BAD_GATEWAY, format!("Failover esausto. Ultimo errore: {}", last_error)))
 }
 
 async fn list_providers(State(state): State<AppState>) -> impl IntoResponse {
@@ -154,4 +170,41 @@ async fn delete_provider(
 
     info!("🗑️ Provider id={} eliminato", id);
     Ok(Json(serde_json::json!({ "id": id, "status": "deleted" })))
+}
+
+async fn handle_get_catalog(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let rows = sqlx::query(
+        "SELECT provider_name, model_id, prompt_cost_per_1m, completion_cost_per_1m, context_length, is_free, capabilities, last_updated 
+         FROM models_catalog ORDER BY is_free DESC, prompt_cost_per_1m ASC LIMIT 200"
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut catalog = Vec::new();
+    for row in rows {
+        use sqlx::Row;
+        catalog.push(serde_json::json!({
+            "provider_name": row.get::<String, _>("provider_name"),
+            "model_id": row.get::<String, _>("model_id"),
+            "prompt_cost_per_1m": row.get::<f64, _>("prompt_cost_per_1m"),
+            "completion_cost_per_1m": row.get::<f64, _>("completion_cost_per_1m"),
+            "context_length": row.get::<i64, _>("context_length"),
+            "is_free": row.get::<i64, _>("is_free") == 1,
+            "last_updated": row.get::<String, _>("last_updated")
+        }));
+    }
+
+    Ok(Json(serde_json::json!({ "count": catalog.len(), "catalog": catalog })))
+}
+
+async fn handle_sync_catalog(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let count = catalog::sync_openrouter_catalog(&state.client, &state.db).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::json!({ "status": "synced", "count": count })))
 }

@@ -14,6 +14,29 @@ pub async fn dispatch_request(
     }
 }
 
+/// Estrae una chiave API attiva ruotando tra le chiavi multiple se separate da virgola o punto e virgola
+fn pick_api_key(api_key_str: Option<&str>, env_fallback: &str) -> String {
+    let raw = api_key_str.filter(|k| !k.trim().is_empty()).map(|k| k.to_string())
+        .unwrap_or_else(|| std::env::var(env_fallback).unwrap_or_default());
+
+    if raw.is_empty() {
+        return "".to_string();
+    }
+
+    let keys: Vec<&str> = raw.split(&[',', ';'][..])
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if keys.is_empty() {
+        return "".to_string();
+    }
+
+    // Seleziona la chiave usando un contatore atomico / nanosecondi per il Round-Robin
+    let idx = (chrono::Utc::now().timestamp_subsec_nanos() as usize) % keys.len();
+    keys[idx].to_string()
+}
+
 async fn try_openai_compatible(
     client: &reqwest::Client,
     provider: &Provider,
@@ -31,11 +54,24 @@ async fn try_openai_compatible(
         body["tools"] = tools.clone();
     }
 
-    let url = if provider.base_url.contains("/v1/chat/completions") {
-        provider.base_url.clone()
+    let base = provider.base_url.trim_end_matches('/');
+    let mut url = if base.ends_with("/chat/completions") {
+        base.to_string()
+    } else if base.ends_with("/v1") {
+        format!("{}/chat/completions", base)
     } else {
-        format!("{}/v1/chat/completions", provider.base_url.trim_end_matches('/'))
+        format!("{}/v1/chat/completions", base)
     };
+
+    let selected_key = match provider.name.as_str() {
+        "gemini-free-tier" => pick_api_key(provider.api_key.as_deref(), "GEMINI_API_KEY"),
+        "groq-free-pool" => pick_api_key(provider.api_key.as_deref(), "GROQ_API_KEY"),
+        _ => pick_api_key(provider.api_key.as_deref(), "OPENROUTER_API_KEY"),
+    };
+
+    if provider.base_url.contains("generativelanguage.googleapis.com") && !selected_key.is_empty() {
+        url = format!("{}?key={}", url, selected_key);
+    }
 
     let mut req = client.post(&url)
         .timeout(std::time::Duration::from_secs(45))
@@ -43,17 +79,13 @@ async fn try_openai_compatible(
 
     match provider.auth_type.as_str() {
         "bearer" => {
-            if let Some(key) = &provider.api_key {
-                if !key.is_empty() {
-                    req = req.bearer_auth(key);
-                }
+            if !selected_key.is_empty() && !provider.base_url.contains("generativelanguage.googleapis.com") {
+                req = req.bearer_auth(selected_key);
             }
         }
         "api-key" => {
-            if let Some(key) = &provider.api_key {
-                if !key.is_empty() {
-                    req = req.header("x-api-key", key.as_str());
-                }
+            if !selected_key.is_empty() {
+                req = req.header("x-api-key", selected_key);
             }
         }
         _ => {}
