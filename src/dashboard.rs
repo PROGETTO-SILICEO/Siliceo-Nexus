@@ -87,9 +87,10 @@ pub fn render_dashboard() -> Html<&'static str> {
         </div>
     </div>
 
-    <div class="tabs">
-        <button class="tab-btn active" onclick="showTab('tab-providers')">⚡ Providers & Pool Stack</button>
-        <button id="tab-btn-catalog" class="tab-btn" onclick="showTab('tab-catalog')">📚 Catalogo Modelli</button>
+    <div class="tabs" id="tabs-bar">
+        <button class="tab-btn active" id="tab-btn-providers" onclick="switchTab('providers')">⚡ Providers & Pool Stack</button>
+        <button class="tab-btn" id="tab-btn-cat-google_aistudio" onclick="switchTab('cat-google_aistudio')">♊ Google AI Studio</button>
+        <button class="tab-btn" id="tab-btn-cat-openrouter" onclick="switchTab('cat-openrouter')">🪐 OpenRouter</button>
     </div>
 
     <!-- TAB 1: PROVIDERS -->
@@ -155,19 +156,17 @@ pub fn render_dashboard() -> Html<&'static str> {
                     <button type="button" class="btn-secondary" id="btn-cancel" style="display:none;" onclick="resetForm()">Annulla</button>
                 </form>
             </div>
-          <!-- TAB 2: CATALOGO MODELLI -->
+        </div>
+    </div>
+
+    <!-- TAB 2: CATALOGO MODELLI (DINAMICO) -->
     <div id="tab-catalog" class="tab-content">
         <div class="card">
-            <h2>📚 Catalogo Modelli Multi-Provider (Sincronizzato 24h) 
+            <h2><span id="catalog-title">📚 Catalogo Modelli</span> 
                 <button onclick="syncCatalog()">🔄 Sincronizza Cataloghi Ora</button>
             </h2>
             <div style="display:flex; flex-wrap:wrap; gap:15px; margin-bottom:15px; align-items:center;">
-                <div style="display:flex; gap:6px;">
-                    <button id="btn-src-all" class="btn-secondary" style="font-size:0.8rem; background:var(--primary); color:#000;" onclick="setCatalogSource('all')">🌐 Tutti</button>
-                    <button id="btn-src-openrouter" class="btn-secondary" style="font-size:0.8rem;" onclick="setCatalogSource('openrouter')">🪐 OpenRouter</button>
-                    <button id="btn-src-google" class="btn-secondary" style="font-size:0.8rem;" onclick="setCatalogSource('google_aistudio')">♊ Google AI Studio</button>
-                </div>
-                <input type="text" id="catalog-search" style="flex:1; min-width:200px;" placeholder="🔍 Cerca modello (es. gemini, qwen, llama, deepseek, free)..." oninput="filterCatalog()">
+                <input type="text" id="catalog-search" style="flex:1; min-width:200px;" placeholder="🔍 Cerca modello (es. gemini, qwen, llama, deepseek)..." oninput="filterCatalog()">
                 <select id="catalog-filter" onchange="filterCatalog()" style="width:180px;">
                     <option value="all">Tutti i Modelli</option>
                     <option value="free" selected>Solo 100% Free ($0.00)</option>
@@ -205,15 +204,44 @@ pub fn render_dashboard() -> Html<&'static str> {
     <script>
         let fullCatalog = [];
         let loadedProvidersList = [];
+        let catalogProvidersMeta = [];
         let currentCatalogSource = 'all';
+        let activeTabKey = 'providers';
 
-        function showTab(tabId) {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            event.target.classList.add('active');
-            document.getElementById(tabId).classList.add('active');
-            if (tabId === 'tab-catalog') {
-                loadCatalog();
+        function renderDynamicTabs() {
+            const container = document.getElementById('tabs-bar');
+            let html = `<button class="tab-btn ${activeTabKey === 'providers' ? 'active' : ''}" id="tab-btn-providers" onclick="switchTab('providers')">⚡ Stack Provider Attivi</button>`;
+            
+            catalogProvidersMeta.forEach(p => {
+                const tabId = `cat-${p.key}`;
+                const isActive = activeTabKey === tabId;
+                html += `<button class="tab-btn ${isActive ? 'active' : ''}" id="tab-btn-${tabId}" onclick="switchTab('${tabId}')">${p.label} (${p.count})</button>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function switchTab(tabKey) {
+            activeTabKey = tabKey;
+            renderDynamicTabs();
+
+            const providersTabContent = document.getElementById('tab-providers');
+            const catalogTabContent = document.getElementById('tab-catalog');
+
+            if (tabKey === 'providers') {
+                providersTabContent.classList.add('active');
+                catalogTabContent.classList.remove('active');
+            } else if (tabKey.startsWith('cat-')) {
+                const providerKey = tabKey.replace('cat-', '');
+                currentCatalogSource = providerKey;
+                providersTabContent.classList.remove('active');
+                catalogTabContent.classList.add('active');
+                
+                const provMeta = catalogProvidersMeta.find(p => p.key === providerKey);
+                const titleText = provMeta ? `${provMeta.label} (${provMeta.count} modelli)` : 'Catalogo Modelli';
+                document.getElementById('catalog-title').innerText = titleText;
+                
+                filterCatalog();
             }
         }
 
@@ -367,34 +395,22 @@ pub fn render_dashboard() -> Html<&'static str> {
                 const res = await fetch('/catalog');
                 const data = await res.json();
                 fullCatalog = data.catalog || [];
-                const orCount = data.openrouter_count || fullCatalog.filter(m => m.provider_name === 'openrouter').length;
-                const googCount = data.google_count || fullCatalog.filter(m => m.provider_name === 'google_aistudio').length;
-                document.getElementById('stat-models').innerHTML = `${fullCatalog.length} <span style="font-size:0.75rem; font-weight:normal; color:var(--muted);">(🪐 ${orCount} | ♊ ${googCount})</span>`;
-                const tabBtn = document.getElementById('tab-btn-catalog');
-                if (tabBtn) tabBtn.innerText = `📚 Catalogo Modelli (${fullCatalog.length})`;
-                filterCatalog();
+                catalogProvidersMeta = data.catalog_providers || [];
+
+                let statsBreakdown = [];
+                catalogProvidersMeta.forEach(p => {
+                    statsBreakdown.push(`${p.label.split(' ')[0]} ${p.count}`);
+                });
+
+                document.getElementById('stat-models').innerHTML = `${fullCatalog.length} <span style="font-size:0.75rem; font-weight:normal; color:var(--muted);">(${statsBreakdown.join(' | ')})</span>`;
+
+                renderDynamicTabs();
+                if (activeTabKey !== 'providers') {
+                    filterCatalog();
+                }
             } catch(e) {
                 console.error("Errore caricamento catalogo:", e);
             }
-        }
-
-        function setCatalogSource(source) {
-            currentCatalogSource = source;
-            ['btn-src-all', 'btn-src-openrouter', 'btn-src-google'].forEach(id => {
-                const btn = document.getElementById(id);
-                if (btn) {
-                    btn.style.background = 'var(--border)';
-                    btn.style.color = 'var(--text)';
-                }
-            });
-            const activeBtn = document.getElementById(
-                source === 'all' ? 'btn-src-all' : (source === 'openrouter' ? 'btn-src-openrouter' : 'btn-src-google')
-            );
-            if (activeBtn) {
-                activeBtn.style.background = 'var(--primary)';
-                activeBtn.style.color = '#000';
-            }
-            filterCatalog();
         }
 
         function filterCatalog() {
@@ -415,7 +431,7 @@ pub fn render_dashboard() -> Html<&'static str> {
                 return;
             }
 
-            filtered.slice(0, 150).forEach(m => {
+            filtered.slice(0, 200).forEach(m => {
                 const isFreeBadge = m.is_free ? '<span class="badge badge-free">FREE</span>' : '<span class="badge badge-paid">PAID</span>';
                 const sourceBadge = m.provider_name === 'google_aistudio'
                     ? '<span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">♊ Google</span>'
@@ -438,7 +454,7 @@ pub fn render_dashboard() -> Html<&'static str> {
         }
 
         function useModelInForm(modelId, providerName) {
-            showTab('tab-providers');
+            switchTab('providers');
             document.getElementById('p-model').value = modelId;
             if (providerName === 'google_aistudio') {
                 document.getElementById('p-name').value = 'gemini-free-tier';
@@ -459,6 +475,7 @@ pub fn render_dashboard() -> Html<&'static str> {
         }
 
         loadProviders();
+        loadCatalog();
     </script>
 </body>
 </html>"#)
