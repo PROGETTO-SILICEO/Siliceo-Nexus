@@ -69,7 +69,7 @@ async fn try_openai_compatible(
         _ => pick_api_key(provider.api_key.as_deref(), "OPENROUTER_API_KEY"),
     };
 
-    if provider.base_url.contains("generativelanguage.googleapis.com") && !selected_key.is_empty() {
+    if provider.base_url.contains("generativelanguage.googleapis.com") && !selected_key.is_empty() && !url.contains("key=") {
         url = format!("{}?key={}", url, selected_key);
     }
 
@@ -79,13 +79,13 @@ async fn try_openai_compatible(
 
     match provider.auth_type.as_str() {
         "bearer" => {
-            if !selected_key.is_empty() && !provider.base_url.contains("generativelanguage.googleapis.com") {
-                req = req.bearer_auth(selected_key);
+            if !selected_key.is_empty() {
+                req = req.bearer_auth(&selected_key);
             }
         }
         "api-key" => {
             if !selected_key.is_empty() {
-                req = req.header("x-api-key", selected_key);
+                req = req.header("x-api-key", &selected_key);
             }
         }
         _ => {}
