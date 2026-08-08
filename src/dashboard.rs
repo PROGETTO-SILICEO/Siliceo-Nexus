@@ -372,8 +372,10 @@ pub fn render_dashboard() -> Html<&'static str> {
             if (tokenInput) tokenInput.value = localStorage.getItem('nexus_admin_token');
         }
 
-        function openAddModal() {
-            resetForm();
+        function openAddModal(isEdit = false) {
+            if (!isEdit) {
+                resetForm();
+            }
             document.getElementById('form-modal').style.display = 'flex';
         }
 
@@ -525,6 +527,9 @@ pub fn render_dashboard() -> Html<&'static str> {
         function editProvider(id) {
             const p = loadedProvidersList.find(x => x.id === id);
             if (!p) return;
+
+            openAddModal(true);
+
             document.getElementById('p-id').value = p.id;
             document.getElementById('p-name').value = p.name;
             document.getElementById('p-url').value = p.base_url;
@@ -534,9 +539,15 @@ pub fn render_dashboard() -> Html<&'static str> {
             document.getElementById('p-priority').value = p.priority;
             document.getElementById('p-tags').value = (p.tags || []).join(', ');
             
+            const matchedPreset = Object.keys(PRESETS).find(k => p.name.toLowerCase().includes(k) || p.base_url.toLowerCase().includes(k));
+            if (matchedPreset) {
+                document.getElementById('p-preset').value = matchedPreset;
+            } else {
+                document.getElementById('p-preset').value = '';
+            }
+
             document.getElementById('form-title').innerText = `✏️ Modifica '${p.name}'`;
             document.getElementById('btn-save').innerText = 'Aggiorna Provider';
-            openAddModal();
         }
 
         function resetForm() {
