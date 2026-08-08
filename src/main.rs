@@ -67,6 +67,13 @@ async fn main() -> anyhow::Result<()> {
         .route("/", get(handle_dashboard))
         // Main OpenAI-compatible LLM endpoint
         .route("/v1/chat/completions", post(handle_chat_completions))
+        // Native Anthropic API compatibility for Claude Code CLI
+        .route("/v1/messages", post(handle_anthropic_messages))
+        .route("/messages", post(handle_anthropic_messages))
+        .route("/v1/v1/messages", post(handle_anthropic_messages))
+        .route("/v1/models", get(handle_v1_models))
+        .route("/models", get(handle_v1_models))
+        .route("/v1/v1/models", get(handle_v1_models))
         // Management API
         .route("/providers", get(list_providers).post(create_provider))
         .route("/providers/fetch_models", post(handle_fetch_models))
@@ -139,6 +146,171 @@ async fn handle_chat_completions(
 
     error!("❌ Tutti i provider della cascata sono falliti. Ultimo errore: {}", last_error);
     Err((StatusCode::BAD_GATEWAY, format!("Failover esausto. Ultimo errore: {}", last_error)))
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AnthropicMessage {
+    pub role: String,
+    pub content: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AnthropicMessageRequest {
+    pub model: Option<String>,
+    pub messages: Vec<AnthropicMessage>,
+    pub system: Option<serde_json::Value>,
+    pub max_tokens: Option<u32>,
+    pub temperature: Option<f32>,
+}
+
+async fn handle_v1_models(State(state): State<AppState>) -> impl IntoResponse {
+    let rows = sqlx::query("SELECT model_id, provider_name FROM models_catalog LIMIT 2000")
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut data = Vec::new();
+
+    for row in rows {
+        use sqlx::Row;
+        let m_id: String = row.get("model_id");
+        let prov: String = row.get("provider_name");
+        data.push(serde_json::json!({
+            "id": m_id,
+            "object": "model",
+            "created": 1700000000,
+            "owned_by": prov
+        }));
+    }
+
+    let claude_aliases = [
+        "claude-sonnet-4-6",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-7-sonnet-20250219",
+        "claude-3-5-haiku-20241022",
+        "claude-3-opus-20240229",
+        "sonnet",
+        "haiku",
+        "opus"
+    ];
+
+    for alias in claude_aliases {
+        data.push(serde_json::json!({
+            "id": alias,
+            "object": "model",
+            "created": 1700000000,
+            "owned_by": "anthropic"
+        }));
+    }
+
+    Json(serde_json::json!({
+        "object": "list",
+        "data": data
+    }))
+}
+
+async fn handle_anthropic_messages(
+    State(state): State<AppState>,
+    Json(anthropic_req): Json<AnthropicMessageRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    info!("📥 Incoming Anthropic /v1/messages request (messages: {})", anthropic_req.messages.len());
+
+    let mut llm_messages = Vec::new();
+
+    if let Some(ref sys_val) = anthropic_req.system {
+        let mut sys_str = String::new();
+        if let Some(s) = sys_val.as_str() {
+            sys_str = s.to_string();
+        } else if let Some(arr) = sys_val.as_array() {
+            for block in arr {
+                if let Some(txt) = block.get("text").and_then(|t| t.as_str()) {
+                    sys_str.push_str(txt);
+                    sys_str.push('\n');
+                }
+            }
+        } else {
+            sys_str = sys_val.to_string();
+        }
+
+        if !sys_str.trim().is_empty() {
+            llm_messages.push(types::Message {
+                role: "system".to_string(),
+                content: sys_str.trim().to_string(),
+            });
+        }
+    }
+
+    for msg in anthropic_req.messages {
+        let mut text_content = String::new();
+        if let Some(s) = msg.content.as_str() {
+            text_content = s.to_string();
+        } else if let Some(arr) = msg.content.as_array() {
+            for block in arr {
+                if let Some(txt) = block.get("text").and_then(|t| t.as_str()) {
+                    text_content.push_str(txt);
+                    text_content.push('\n');
+                }
+            }
+        } else {
+            text_content = msg.content.to_string();
+        }
+
+        llm_messages.push(types::Message {
+            role: msg.role,
+            content: text_content.trim().to_string(),
+        });
+    }
+
+    let llm_req = LLMRequest {
+        messages: llm_messages,
+        model: anthropic_req.model.clone(),
+        max_tokens: anthropic_req.max_tokens,
+        temperature: anthropic_req.temperature,
+        stream: None,
+        tools: None,
+    };
+
+    let intent = router::classify_intent(&llm_req);
+    let eligible = router::select_eligible_providers(&state.providers, intent, false).await;
+
+    if eligible.is_empty() {
+        return Err((StatusCode::SERVICE_UNAVAILABLE, "Nessun provider LLM disponibile".to_string()));
+    }
+
+    let mut last_err = String::new();
+    for p in &eligible {
+        match adapters::dispatch_request(&state.client, p, &llm_req).await {
+            Ok(res) => {
+                let text_out = res.choices.first()
+                    .map(|c| c.message.content.clone())
+                    .unwrap_or_default();
+
+                return Ok(Json(serde_json::json!({
+                    "id": format!("msg_{}", res.id),
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": text_out
+                        }
+                    ],
+                    "model": res.model,
+                    "stop_reason": "end_turn",
+                    "stop_sequence": null,
+                    "usage": {
+                        "input_tokens": res.usage.prompt_tokens,
+                        "output_tokens": res.usage.completion_tokens
+                    }
+                })));
+            }
+            Err(e) => {
+                last_err = e.to_string();
+            }
+        }
+    }
+
+    Err((StatusCode::BAD_GATEWAY, format!("Failover esausto: {}", last_err)))
 }
 
 pub fn redact_secrets(text: &str) -> String {
