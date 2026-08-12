@@ -18,8 +18,11 @@ mod router;
 mod adapters;
 mod dashboard;
 mod catalog;
+mod metrics;
+mod streaming;
 
 use types::{Provider, ProviderInput, LLMRequest, LLMResponse};
+use metrics::MetricsRegistry;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -27,6 +30,10 @@ pub struct AppState {
     pub providers: Arc<RwLock<Vec<Provider>>>,
     pub client: reqwest::Client,
     pub request_window: Arc<Mutex<VecDeque<std::time::Instant>>>,
+    pub metrics: Arc<Mutex<MetricsRegistry>>,
+    pub gpu: Arc<RwLock<Option<serde_json::Value>>>,
+    /// Cooldown provider in-memory: name -> istante UTC fino a cui è in pausa.
+    pub cooldowns: Arc<RwLock<std::collections::HashMap<String, chrono::DateTime<chrono::Utc>>>>,
 }
 
 #[tokio::main]
@@ -66,10 +73,17 @@ async fn main() -> anyhow::Result<()> {
             .redirect(Policy::none())
             .build()?,
         request_window: Arc::new(Mutex::new(VecDeque::new())),
+        metrics: Arc::new(Mutex::new(MetricsRegistry::new())),
+        gpu: Arc::new(RwLock::new(None)),
+        cooldowns: Arc::new(RwLock::new(std::collections::HashMap::new())),
     };
 
     // Avvia il loop di aggiornamento catalogo modelli in background (OpenRouter 24h sync)
     catalog::spawn_catalog_sync_loop(state.client.clone(), state.db.clone());
+    // Avvia il polling della GPU reale dal nodo beellama (RTX 2070)
+    spawn_gpu_polling(state.clone());
+    // Avvia l'assessment proattivo dei provider (marca senza-chiave in cooldown)
+    spawn_provider_assessment(state.clone());
 
     let app = Router::new()
         // Dashboard SPA
@@ -95,6 +109,12 @@ async fn main() -> anyhow::Result<()> {
         // Health & Live Telemetry
         .route("/health", get(handle_health))
         .route("/stats", get(handle_stats))
+        // Health check dell'SDK Anthropic: Claude Code chiama HEAD/GET {base}/api/hello
+        // all'avvio. Se risponde 404, il client fallisce con "errore API".
+        .route("/api/hello", get(handle_api_hello).head(handle_api_hello))
+        .route("/v1/api/hello", get(handle_api_hello).head(handle_api_hello))
+        .route("/messages/count_tokens", post(handle_count_tokens))
+        .route("/v1/messages/count_tokens", post(handle_count_tokens))
         .with_state(state);
 
     let addr = std::env::var("NEXUS_ADDR").unwrap_or_else(|_| "127.0.0.1:8082".to_string());
@@ -115,11 +135,145 @@ async fn handle_dashboard() -> impl IntoResponse {
     )
 }
 
-static TOTAL_REQUESTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(14);
-static LAST_LATENCY_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(14);
+/// Polling della GPU reale dal nodo beellama (RTX 2070), ogni 2 secondi.
+/// L'endpoint /gpu del beellama-switcher espone utilization, VRAM, temperatura.
+fn spawn_gpu_polling(state: AppState) {
+    let gpu_url = std::env::var("BELLAMA_GPU_URL")
+        .unwrap_or_else(|_| "http://100.98.20.76:8080/gpu".to_string());
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
+        interval.tick().await; // primo tick immediato
+        loop {
+            interval.tick().await;
+            let url = gpu_url.clone();
+            match state.client.get(&url).timeout(std::time::Duration::from_secs(3)).send().await {
+                Ok(resp) => {
+                    let json = resp.json::<serde_json::Value>().await.ok();
+                    if let Some(v) = json {
+                        let mut gpu = state.gpu.write().await;
+                        *gpu = Some(v);
+                    }
+                }
+                Err(e) => {
+                    let mut gpu = state.gpu.write().await;
+                    *gpu = Some(serde_json::json!({
+                        "status": "error",
+                        "error": e.to_string()
+                    }));
+                }
+            }
+        }
+    });
+}
 
-async fn handle_stats(State(state): State<AppState>) -> impl IntoResponse {
-    let providers_count = state.providers.read().await.len();
+/// Assessment proattivo dei provider (ogni 5 minuti).
+/// Marca in cooldown i provider senza chiave configurata (inutile provarli)
+/// e azzera i cooldown scaduti per i provider con chiave. Tassonomia:
+/// - chiave assente/vuota → cooldown 10 min (probabilmente non configurato)
+/// - chiave presente → nessuna azione (gli errori reali sono gestiti in dispatch)
+fn spawn_provider_assessment(state: AppState) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let now = chrono::Utc::now();
+            let providers_snapshot = state.providers.read().await.clone();
+
+            // Providers senza chiave e con auth_type che la richiede → cooldown 10 min
+            let mut to_cooldown: Vec<String> = Vec::new();
+            for p in &providers_snapshot {
+                if !p.enabled { continue; }
+                let needs_key = p.auth_type == "bearer" || p.auth_type == "api-key";
+                if needs_key {
+                    let has_key = p.api_key.as_ref().map_or(false, |k| !k.trim().is_empty());
+                    if !has_key {
+                        to_cooldown.push(p.name.clone());
+                    }
+                }
+            }
+
+            if !to_cooldown.is_empty() {
+                let mut map = state.cooldowns.write().await;
+                for name in &to_cooldown {
+                    map.insert(name.clone(), now + chrono::Duration::seconds(600));
+                }
+                info!("🔍 [assessment] {} provider senza chiave messi in cooldown (10m)", to_cooldown.len());
+            }
+        }
+    });
+}
+
+/// Applica un cooldown a un provider dopo un errore.
+/// 429 → 120s, 401/403 → 300s (chiave non valida), 5xx → 60s, altri → 15s.
+/// Backoff esponenziale: se già in cooldown, raddoppia (max 600s).
+pub async fn apply_provider_cooldown(state: &AppState, provider: &Provider, status: Option<u16>) {
+    let now = chrono::Utc::now();
+    let base_secs = match status {
+        Some(401) | Some(403) => 300,
+        Some(429) => 120,
+        Some(code) if code >= 500 && code < 600 => 60,
+        _ => 15,
+    };
+
+    let duration = {
+        let mut map = state.cooldowns.write().await;
+        let multiplier = match map.get(&provider.name) {
+            Some(until) if *until > now => 2,
+            _ => 1,
+        };
+        let secs = (base_secs * multiplier).min(600);
+        let until = now + chrono::Duration::seconds(secs as i64);
+        map.insert(provider.name.clone(), until);
+        secs
+    };
+
+    info!("⏸️ Cooldown '{}' ({}s) dopo errore {:?}", provider.name, duration, status);
+
+    // Persistenza DB (fire-and-forget)
+    let db = state.db.clone();
+    let name = provider.name.clone();
+    let until = now + chrono::Duration::seconds(duration as i64);
+    tokio::spawn(async move {
+        let _ = sqlx::query("UPDATE providers SET cooldown_until = ?, updated_at = datetime('now') WHERE name = ?")
+            .bind(until.to_rfc3339())
+            .bind(name)
+            .execute(&db)
+            .await;
+    });
+}
+
+/// Azzera il cooldown di un provider dopo un successo.
+pub async fn clear_provider_cooldown(state: &AppState, provider_name: &str) {
+    let removed = state.cooldowns.write().await.remove(provider_name).is_some();
+    if removed {
+        let db = state.db.clone();
+        let name = provider_name.to_string();
+        tokio::spawn(async move {
+            let _ = sqlx::query("UPDATE providers SET cooldown_until = NULL WHERE name = ?")
+                .bind(name)
+                .execute(&db)
+                .await;
+        });
+    }
+}
+
+/// Estrae lo status HTTP da un messaggio di errore di dispatch_request.
+/// Gli errori hanno forma "Provider X HTTP 429: ...".
+fn error_status_code(err_str: &str) -> Option<u16> {
+    for marker in ["HTTP ", "http ", "status ", "Status "] {
+        if let Some(pos) = err_str.find(marker) {
+            let after = &err_str[pos + marker.len()..];
+            let num: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if let Ok(code) = num.parse::<u16>() {
+                return Some(code);
+            }
+        }
+    }
+    None
+}
+
+async fn handle_stats(State(state): State<AppState>) -> impl IntoResponse {    let providers_count = state.providers.read().await.len();
 
     let mem_info = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
     let mut mem_total = 100.0;
@@ -138,25 +292,61 @@ async fn handle_stats(State(state): State<AppState>) -> impl IntoResponse {
     }
     let memory_used_pct = (((mem_total - mem_free) / mem_total) * 100.0).round();
 
-    let total_reqs = TOTAL_REQUESTS.load(std::sync::atomic::Ordering::Relaxed);
-    let latency = LAST_LATENCY_MS.load(std::sync::atomic::Ordering::Relaxed);
-
-    Json(serde_json::json!({
-        "uptime": "99.9%",
-        "providers_count": providers_count,
-        "total_requests": total_reqs,
-        "last_latency_ms": latency,
-        "gpu_utilization_pct": ((total_reqs % 25) + 40),
-        "system_memory_used_pct": memory_used_pct,
-        "status": "online"
-    }))
+    let metrics = state.metrics.lock().await;
+    let gpu = state.gpu.read().await.clone();
+    let mut snapshot = metrics.snapshot();
+    snapshot["providers_count"] = serde_json::json!(providers_count);
+    snapshot["gpu"] = serde_json::json!(gpu);
+    snapshot["system_memory_used_pct"] = serde_json::json!(memory_used_pct);
+    snapshot["status"] = serde_json::json!("online");
+    Json(snapshot)
 }
 
-async fn handle_health() -> impl IntoResponse {
+async fn handle_health(State(state): State<AppState>) -> impl IntoResponse {
+    let uptime = state.metrics.lock().await.uptime_secs();
+    let gpu = state.gpu.read().await.clone();
+    let providers_count = state.providers.read().await.len();
     Json(serde_json::json!({
         "status": "ok",
         "service": "siliceo-nexus",
-        "version": "0.1.0"
+        "version": env!("CARGO_PKG_VERSION"),
+        "uptime_secs": uptime,
+        "providers_count": providers_count,
+        "gpu": gpu,
+    }))
+}
+
+/// Health check dell'SDK Anthropic. Claude Code lo chiama all'avvio (HEAD/GET).
+/// Deve rispondere 200, altrimenti il client riporta un errore API.
+async fn handle_api_hello() -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "ok",
+            "service": "siliceo-nexus",
+        })),
+    )
+}
+
+/// Claude Code in modalità interattiva chiama /v1/messages/count_tokens per stimare i costi.
+/// Restituisce una stima basata sui caratteri del body.
+async fn handle_count_tokens(
+    headers: HeaderMap,
+    request: axum::extract::Request,
+) -> impl IntoResponse {
+    verify_api_auth(&headers).ok();
+    let method = request.method().to_string();
+    let path = request.uri().path().to_string();
+    let bytes = match axum::body::to_bytes(request.into_body(), 10 * 1024 * 1024).await {
+        Ok(b) => b,
+        Err(_) => return Json(serde_json::json!({"input_tokens": 0})),
+    };
+    let text = String::from_utf8_lossy(&bytes);
+    let input_tokens = (text.chars().count() / 4).max(1) as u64;
+    info!("🔢 [count_tokens] {} {} → stima {} token", method, path, input_tokens);
+    Json(serde_json::json!({
+        "input_tokens": input_tokens,
+        "output_tokens": 0
     }))
 }
 
@@ -172,10 +362,17 @@ async fn handle_chat_completions(
     // 1. Classificazione dell'intento in < 1ms
     let intent = router::classify_intent(&request);
     let requires_tools = request.tools.is_some();
+    let intent_str = intent.as_str().to_string();
+    let start = std::time::Instant::now();
+    {
+        let mut m = state.metrics.lock().await;
+        m.record_start("chat", &intent_str);
+    }
 
     // 2. Ottieni tutti i provider idonei ordinati per priorità per la cascata di failover
-    let eligible = router::select_eligible_providers(&state.providers, intent, requires_tools).await;
+    let eligible = router::select_eligible_providers(&state.providers, Some(&state.cooldowns), intent, requires_tools).await;
     if eligible.is_empty() {
+        state.metrics.lock().await.record_endpoint_error("chat");
         return Err((StatusCode::SERVICE_UNAVAILABLE, "Nessun provider LLM disponibile".to_string()));
     }
 
@@ -184,18 +381,53 @@ async fn handle_chat_completions(
     // 3. Cascata di Failover Sequenziale
     for p in &eligible {
         info!("🚀 Tentativo con provider '{}' (model: {})", p.name, p.model);
+        let attempt_start = std::time::Instant::now();
         match adapters::dispatch_request(&state.client, p, &request).await {
             Ok(response) => {
+                let latency_ms = attempt_start.elapsed().as_millis() as u64;
+                {
+                    let mut m = state.metrics.lock().await;
+                    m.record_provider(&p.name, true, latency_ms);
+                }
+                // Fallback dichiarativo: risposta vuota (content="" e nessun tool) = provider inutile
+                let has_text = response.choices.first().map_or(false, |c| !c.message.content.trim().is_empty());
+                let has_tools = response.tool_calls.as_ref().map_or(false, |t| !t.is_empty());
+                if !has_text && !has_tools {
+                    let err_str = format!("Provider {} ha risposto con contenuto vuoto", p.name);
+                    apply_provider_cooldown(&state, p, Some(502)).await;
+                    warn!("⚠️ {} — passo al candidato successivo", err_str);
+                    last_error = err_str;
+                    continue;
+                }
+                clear_provider_cooldown(&state, &p.name).await;
                 info!("✅ Risposta consegnata da '{}' (model: {})", p.name, response.model);
+                // Uso persistente per statistiche/costi
+                let db = state.db.clone();
+                let pname = p.name.clone();
+                let model_used = response.model.clone();
+                let pt = response.usage.prompt_tokens;
+                let ct = response.usage.completion_tokens;
+                let intent_c = intent_str.clone();
+                tokio::spawn(async move {
+                    let _ = db::insert_usage_log(&db, &pname, &model_used, pt, ct, 0.0, &intent_c).await;
+                });
                 return Ok(Json(response));
             }
             Err(e) => {
+                let latency_ms = attempt_start.elapsed().as_millis() as u64;
+                {
+                    let mut m = state.metrics.lock().await;
+                    m.record_provider(&p.name, false, latency_ms);
+                }
+                let err_str = e.to_string();
+                apply_provider_cooldown(&state, p, error_status_code(&err_str)).await;
                 warn!("⚠️ Provider '{}' fallito: {}. Passo al candidato successivo...", p.name, e);
-                last_error = e.to_string();
+                last_error = err_str;
             }
         }
     }
 
+    state.metrics.lock().await.record_endpoint_error("chat");
     error!("❌ Tutti i provider della cascata sono falliti. Ultimo errore: {}", last_error);
     Err((StatusCode::BAD_GATEWAY, format!("Failover esausto. Ultimo errore: {}", last_error)))
 }
@@ -213,6 +445,9 @@ pub struct AnthropicMessageRequest {
     pub system: Option<serde_json::Value>,
     pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
+    pub stream: Option<bool>,
+    pub stop_sequences: Option<Vec<String>>,
+    pub tools: Option<serde_json::Value>,
 }
 
 async fn handle_v1_models(
@@ -266,12 +501,49 @@ async fn handle_v1_models(
     })))
 }
 
+/// Limita il contesto della richiesta: se i messaggi (escluso system) superano una
+/// soglia stimata di token, tronca i più vecchi mantenendo gli ultimi N.
+/// È una forma essenziale di context management per sessioni lunghe: senza questo,
+/// una conversazione di 100+ messaggi esplode il contesto del provider.
+fn trim_context(messages: Vec<types::Message>, max_est_tokens: usize) -> Vec<types::Message> {
+    const CHARS_PER_TOKEN: usize = 4;
+
+    // Separa system (va sempre preservato) dal resto
+    let mut system_msgs = Vec::new();
+    let mut history = Vec::new();
+    for m in messages {
+        if m.role == "system" {
+            system_msgs.push(m);
+        } else {
+            history.push(m);
+        }
+    }
+
+    // Stima token totali
+    let total_est: usize = history.iter().map(|m| m.content.chars().count() / CHARS_PER_TOKEN).sum();
+    if total_est <= max_est_tokens {
+        return system_msgs.into_iter().chain(history).collect();
+    }
+
+    // Taglia dalla testa finché rientra (mantiene i più recenti)
+    let mut trimmed = history;
+    let mut est: usize = trimmed.iter().map(|m| m.content.chars().count() / CHARS_PER_TOKEN).sum();
+    while est > max_est_tokens && trimmed.len() > 1 {
+        let dropped = trimmed.remove(0);
+        est = est.saturating_sub(dropped.content.chars().count() / CHARS_PER_TOKEN);
+    }
+
+    info!("✂️ [context] contesto troncato: {} messaggi mantenuti su ~{} token stimati", trimmed.len(), max_est_tokens);
+    system_msgs.into_iter().chain(trimmed).collect()
+}
+
 async fn handle_anthropic_messages(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(anthropic_req): Json<AnthropicMessageRequest>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+) -> Result<axum::response::Response, (StatusCode, String)> {
     verify_api_auth(&headers)?;
+    enforce_inference_rate_limit(&state).await?;
     info!("📥 Incoming Anthropic /v1/messages request (messages: {})", anthropic_req.messages.len());
 
     let mut llm_messages = Vec::new();
@@ -293,83 +565,346 @@ async fn handle_anthropic_messages(
 
         if !sys_str.trim().is_empty() {
             llm_messages.push(types::Message {
+                tool_call_id: None,
+                tool_name: None,
+                tool_calls_json: None,
                 role: "system".to_string(),
                 content: sys_str.trim().to_string(),
             });
         }
     }
 
-    for msg in anthropic_req.messages {
-        let mut text_content = String::new();
-        if let Some(s) = msg.content.as_str() {
-            text_content = s.to_string();
-        } else if let Some(arr) = msg.content.as_array() {
+    // Mappa tool_call_id → tool_name dai blocchi tool_use nella conversazione.
+    // Necessaria per Gemini: il tool_result richiede function_response.name.
+    let mut tool_names: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for msg in &anthropic_req.messages {
+        if let Some(arr) = msg.content.as_array() {
             for block in arr {
-                if let Some(txt) = block.get("text").and_then(|t| t.as_str()) {
-                    text_content.push_str(txt);
-                    text_content.push('\n');
+                if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                    let tu_id = block.get("id").and_then(|t| t.as_str()).unwrap_or("");
+                    let tu_name = block.get("name").and_then(|t| t.as_str()).unwrap_or("");
+                    if !tu_id.is_empty() && !tu_name.is_empty() {
+                        tool_names.insert(tu_id.to_string(), tu_name.to_string());
+                    }
                 }
             }
-        } else {
-            text_content = msg.content.to_string();
+        }
+    }
+
+    for msg in anthropic_req.messages {
+        // Caso semplice: contenuto è una stringa
+        if let Some(s) = msg.content.as_str() {
+            llm_messages.push(types::Message {
+                tool_call_id: None,
+                tool_name: None,
+                tool_calls_json: None,
+                role: msg.role.clone(),
+                content: s.to_string(),
+            });
+            continue;
         }
 
+        // Contenuto è un array di content blocks
+        if let Some(arr) = msg.content.as_array() {
+            for block in arr {
+                let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                match block_type {
+                    "text" => {
+                        if let Some(txt) = block.get("text").and_then(|t| t.as_str()) {
+                            llm_messages.push(types::Message {
+                                tool_call_id: None,
+                tool_name: None,
+                tool_calls_json: None,
+                                role: msg.role.clone(),
+                                content: txt.to_string(),
+                            });
+                        }
+                    }
+                    // Tool use (dal modello): converti in assistant message con tool_calls (formato OpenAI)
+                    "tool_use" => {
+                        let tu_id = block.get("id").and_then(|t| t.as_str()).unwrap_or("");
+                        let tu_name = block.get("name").and_then(|t| t.as_str()).unwrap_or("");
+                        let tu_input = block.get("input").cloned().unwrap_or(serde_json::json!({}));
+                        if !tu_id.is_empty() && !tu_name.is_empty() {
+                            let tc = serde_json::json!({
+                                "id": tu_id,
+                                "type": "function",
+                                "function": {
+                                    "name": tu_name,
+                                    "arguments": tu_input.to_string()
+                                }
+                            });
+                            // Raggruppa: se l'ultimo messaggio è già assistant con tool_calls, appendi
+                            if let Some(last) = llm_messages.last_mut() {
+                                if last.role == "assistant" && last.tool_calls_json.is_some() {
+                                    if let Some(arr) = last.tool_calls_json.as_mut().and_then(|v| v.as_array_mut()) {
+                                        arr.push(tc);
+                                        continue;
+                                    }
+                                }
+                            }
+                            llm_messages.push(types::Message {
+                                tool_call_id: None,
+                                tool_name: None,
+                                role: "assistant".to_string(),
+                                content: String::new(),
+                                tool_calls_json: Some(serde_json::json!([tc])),
+                            });
+                        }
+                    }
+                    // Tool result da Claude Code → messaggio OpenAI role:"tool" con tool_call_id
+                    "tool_result" => {
+                        let tool_use_id = block.get("tool_use_id").and_then(|t| t.as_str()).unwrap_or("");
+                        let content = extract_tool_result_content(&block["content"]);
+                        let tool_name = if tool_use_id.is_empty() {
+                            None
+                        } else {
+                            tool_names.get(tool_use_id).cloned()
+                        };
+                        info!("🔧 [anthropic] tool_result: id={} name={:?} mappa_size={}", tool_use_id, tool_name, tool_names.len());
+                        llm_messages.push(types::Message {
+                            tool_call_id: Some(tool_use_id.to_string()),
+                            tool_name,
+                            tool_calls_json: None,
+                            role: "tool".to_string(),
+                            content,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            continue;
+        }
+
+        // Fallback: content è qualcos'altro
         llm_messages.push(types::Message {
-            role: msg.role,
-            content: text_content.trim().to_string(),
+            tool_call_id: None,
+            tool_name: None,
+            tool_calls_json: None,
+            role: msg.role.clone(),
+            content: msg.content.to_string(),
         });
     }
+
+    // Context management: limita la storia alle ultime ~24k token stimati
+    // (preservando system) per non esplodere il contesto dei provider.
+    let llm_messages = trim_context(llm_messages, 24_000);
 
     let llm_req = LLMRequest {
         messages: llm_messages,
         model: anthropic_req.model.clone(),
         max_tokens: anthropic_req.max_tokens,
         temperature: anthropic_req.temperature,
-        stream: None,
-        tools: None,
+        stream: anthropic_req.stream,
+        tools: anthropic_req.tools.clone(),
+        stop: anthropic_req.stop_sequences.clone(),
     };
 
     let intent = router::classify_intent(&llm_req);
-    let eligible = router::select_eligible_providers(&state.providers, intent, false).await;
+    let intent_str = intent.as_str().to_string();
+    {
+        let mut m = state.metrics.lock().await;
+        m.record_start("anthropic", &intent_str);
+    }
+    // requires_tools: solo se la richiesta ha tools o se è un tool_result (role:"tool")
+    let has_tools = llm_req.tools.as_ref().map_or(false, |t| t.as_array().map_or(false, |a| !a.is_empty()));
+    let has_tool_result = llm_req.messages.iter().any(|m| m.role == "tool");
+    info!("🔧 [anthropic] has_tools={} has_tool_result={} roles={:?}", has_tools, has_tool_result, llm_req.messages.iter().map(|m| m.role.as_str()).collect::<Vec<_>>());
+    let eligible = router::select_eligible_providers(&state.providers, Some(&state.cooldowns), intent, has_tools || has_tool_result).await;
 
     if eligible.is_empty() {
+        state.metrics.lock().await.record_endpoint_error("anthropic");
         return Err((StatusCode::SERVICE_UNAVAILABLE, "Nessun provider LLM disponibile".to_string()));
+    }
+
+    // STREAMING: se il client chiede stream, rispondi in SSE (Anthropic format)
+    info!("🔧 [anthropic] stream richiesto: {:?}", llm_req.stream);
+    if llm_req.stream == Some(true) {
+        return handle_anthropic_stream(&state, &eligible, &llm_req, &intent_str).await;
     }
 
     let mut last_err = String::new();
     for p in &eligible {
+        info!("🚀 [anthropic] Tentativo con provider '{}' (model: {})", p.name, p.model);
+        let attempt_start = std::time::Instant::now();
         match adapters::dispatch_request(&state.client, p, &llm_req).await {
             Ok(res) => {
+                let latency_ms = attempt_start.elapsed().as_millis() as u64;
+                {
+                    let mut m = state.metrics.lock().await;
+                    m.record_provider(&p.name, true, latency_ms);
+                }
                 let text_out = res.choices.first()
                     .map(|c| c.message.content.clone())
                     .unwrap_or_default();
 
-                return Ok(Json(serde_json::json!({
+                // Fallback dichiarativo: risposta vuota senza tool = provider inutile
+                let has_tools_resp = res.tool_calls.as_ref().map_or(false, |t| !t.is_empty());
+                if text_out.trim().is_empty() && !has_tools_resp {
+                    let err_str = format!("Provider {} ha risposto con contenuto vuoto", p.name);
+                    apply_provider_cooldown(&state, p, Some(502)).await;
+                    warn!("⚠️ {} — passo al candidato successivo", err_str);
+                    last_err = err_str;
+                    continue;
+                }
+                clear_provider_cooldown(&state, &p.name).await;
+
+                // Costruisci content array (text + tool_use blocks)
+                let mut content_blocks: Vec<serde_json::Value> = Vec::new();
+                if !text_out.is_empty() {
+                    content_blocks.push(serde_json::json!({
+                        "type": "text",
+                        "text": text_out
+                    }));
+                }
+                if let Some(ref tool_calls) = res.tool_calls {
+                    for tc in tool_calls {
+                        content_blocks.push(serde_json::json!({
+                            "type": "tool_use",
+                            "id": tc.id,
+                            "name": tc.name,
+                            "input": tc.input
+                        }));
+                    }
+                }
+                if content_blocks.is_empty() {
+                    content_blocks.push(serde_json::json!({
+                        "type": "text",
+                        "text": ""
+                    }));
+                }
+
+                let stop_reason = if res.tool_calls.as_ref().map_or(false, |t| !t.is_empty()) {
+                    "tool_use"
+                } else {
+                    "end_turn"
+                };
+
+                let payload = serde_json::json!({
                     "id": format!("msg_{}", res.id),
                     "type": "message",
                     "role": "assistant",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": text_out
-                        }
-                    ],
+                    "content": content_blocks,
                     "model": res.model,
-                    "stop_reason": "end_turn",
+                    "stop_reason": stop_reason,
                     "stop_sequence": null,
                     "usage": {
                         "input_tokens": res.usage.prompt_tokens,
                         "output_tokens": res.usage.completion_tokens
                     }
-                })));
+                });
+                return axum::response::Response::builder()
+                    .status(StatusCode::OK)
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(serde_json::to_vec(&payload).unwrap_or_default()))
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
             }
             Err(e) => {
-                last_err = e.to_string();
+                let latency_ms = attempt_start.elapsed().as_millis() as u64;
+                {
+                    let mut m = state.metrics.lock().await;
+                    m.record_provider(&p.name, false, latency_ms);
+                }
+                let err_str = e.to_string();
+                warn!("⚠️ [anthropic] Provider '{}' fallito: {}", p.name, err_str);
+                apply_provider_cooldown(&state, p, error_status_code(&err_str)).await;
+                last_err = err_str;
             }
         }
     }
 
+    state.metrics.lock().await.record_endpoint_error("anthropic");
     Err((StatusCode::BAD_GATEWAY, format!("Failover esausto: {}", last_err)))
+}
+
+/// Estrae il contenuto testuale di un tool_result Anthropic.
+/// Claude Code manda `content` come STRINGA o come ARRAY di blocchi
+/// [{"type":"text","text":"..."}]. Gestiamo entrambi.
+fn extract_tool_result_content(content: &serde_json::Value) -> String {
+    match content {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(blocks) => {
+            let parts: Vec<String> = blocks.iter().filter_map(|b| {
+                b.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
+            }).collect();
+            if parts.is_empty() {
+                content.to_string()
+            } else {
+                parts.join("\n")
+            }
+        }
+        other => other.as_str().unwrap_or("").to_string(),
+    }
+}
+
+/// Gestisce una richiesta Anthropic /v1/messages in STREAMING.
+/// Prova i provider in cascata; al primo che accetta, converte il flusso SSE
+/// OpenAI in eventi Anthropic e lo restituisce come `text/event-stream`.
+async fn handle_anthropic_stream(
+    state: &AppState,
+    eligible: &[Provider],
+    llm_req: &LLMRequest,
+    intent_str: &str,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    use axum::body::Body;
+    use axum::response::Response;
+
+    let mut last_err = String::new();
+
+    for p in eligible {
+        info!("🚀 [anthropic:stream] Tentativo con provider '{}' (model: {})", p.name, p.model);
+
+        // Solo provider OpenAI-compat supportano streaming in questo percorso
+        if p.auth_type != "bearer" && p.auth_type != "api-key" && p.auth_type != "none" {
+            continue;
+        }
+
+        let attempt_start = std::time::Instant::now();
+        match adapters::stream_openai_compatible(&state.client, p, llm_req).await {
+            Ok(stream) => {
+                let latency_ms = attempt_start.elapsed().as_millis() as u64;
+                {
+                    let mut m = state.metrics.lock().await;
+                    m.record_provider(&p.name, true, latency_ms);
+                }
+                clear_provider_cooldown(&state, &p.name).await;
+                info!("✅ [anthropic:stream] Streaming avviato da '{}' ({}ms)", p.name, latency_ms);
+
+                let message_id = format!("msg_{}", uuid::Uuid::new_v4().simple());
+                let input_tokens = llm_req.messages.iter().map(|m| m.content.chars().count()).sum::<usize>() as u64 / 4;
+
+                let anthropic_stream = streaming::AnthropicSseStream::new(
+                    stream,
+                    llm_req.model.clone().unwrap_or_default(),
+                    message_id,
+                    input_tokens,
+                );
+
+                let body = Body::from_stream(anthropic_stream);
+                return Response::builder()
+                    .status(StatusCode::OK)
+                    .header("content-type", "text/event-stream")
+                    .header("cache-control", "no-cache")
+                    .header("x-accel-buffering", "no")
+                    .body(body)
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
+            }
+            Err(e) => {
+                let latency_ms = attempt_start.elapsed().as_millis() as u64;
+                {
+                    let mut m = state.metrics.lock().await;
+                    m.record_provider(&p.name, false, latency_ms);
+                }
+                let err_str = e.to_string();
+                apply_provider_cooldown(&state, p, error_status_code(&err_str)).await;
+                warn!("⚠️ [anthropic:stream] Provider '{}' fallito: {}", p.name, e);
+                last_err = err_str;
+            }
+        }
+    }
+
+    state.metrics.lock().await.record_endpoint_error("anthropic");
+    Err((StatusCode::BAD_GATEWAY, format!("Streaming failover esausto: {}", last_err)))
 }
 
 pub fn redact_secrets(text: &str) -> String {
@@ -712,6 +1247,9 @@ async fn handle_test_provider(
         model: Some(target.model.clone()),
         messages: vec![
             types::Message {
+                tool_call_id: None,
+                tool_name: None,
+                tool_calls_json: None,
                 role: "user".to_string(),
                 content: "Test di connettività Siliceo-Nexus. Rispondi 'OK'".to_string(),
             }
@@ -720,6 +1258,7 @@ async fn handle_test_provider(
         max_tokens: Some(50),
         tools: None,
         stream: None,
+        stop: None,
     };
 
     let start = std::time::Instant::now();
@@ -785,6 +1324,26 @@ pub struct FetchModelsPayload {
     pub provider_key: Option<String>,
     pub provider_id: Option<i64>,
     pub provider_name: Option<String>,
+}
+
+/// Inferisce la chiave catalogo (provider_name) dall'URL dell'endpoint.
+/// Usata quando il frontend non fornisce provider_key, per non etichettare
+/// tutti i modelli come "custom".
+fn infer_provider_key(base_url: &str) -> String {
+    let b = base_url.to_lowercase();
+    if b.contains("openrouter.ai") { "openrouter".to_string() }
+    else if b.contains("api.groq.com") { "groq".to_string() }
+    else if b.contains("generativelanguage.googleapis.com") { "google_aistudio".to_string() }
+    else if b.contains("integrate.api.nvidia.com") || b.contains("api.nvidia.com") { "nvidia".to_string() }
+    else if b.contains("api.mistral.ai") { "mistral".to_string() }
+    else if b.contains("apihub.agnes-ai.com") { "agnes".to_string() }
+    else if b.contains("api.cerebras.ai") { "cerebras".to_string() }
+    else if b.contains("api.inceptionlabs.ai") || b.contains("fireworks") { "fireworks".to_string() }
+    else if b.contains("11434") || b.contains("ollama") { "ollama_local".to_string() }
+    else if b.contains("100.98.20.76") || b.contains("beellama") { "beellama".to_string() }
+    else if b.contains("api.anthropic.com") { "anthropic".to_string() }
+    else if b.contains("api.openai.com") { "openai".to_string() }
+    else { "custom".to_string() }
 }
 
 async fn handle_fetch_models(
@@ -935,7 +1494,12 @@ async fn handle_fetch_models(
         return Err((StatusCode::NOT_FOUND, Json(serde_json::json!({ "success": false, "error": format!("Nessun modello estratto dalla risposta di {}", url) }))));
     }
 
-    let prov_key = payload.provider_key.unwrap_or_else(|| "custom".to_string());
+    // Se il frontend non specifica provider_key, inferiscilo dall'URL invece di
+    // etichettare tutto "custom". Evita centinaia di modelli senza origine corretta.
+    let prov_key = match payload.provider_key.as_deref() {
+        Some(k) if !k.trim().is_empty() && k != "custom" => k.to_string(),
+        _ => infer_provider_key(&payload.base_url),
+    };
     for m_id in &model_ids {
         let _ = sqlx::query(
             "INSERT OR REPLACE INTO models_catalog 

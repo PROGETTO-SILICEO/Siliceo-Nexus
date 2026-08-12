@@ -67,6 +67,19 @@ pub fn render_dashboard() -> Html<&'static str> {
         .spark-bar.high { background: var(--accent); }
         .spark-bar.active { background: var(--primary); box-shadow: 0 0 6px var(--primary); }
 
+        /* Analog Gauge Cluster — cruscotto strumento */
+        .gauge-cluster { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-top: 4px; }
+        .gauge-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .gauge-svg { width: 120px; height: 120px; }
+        .gauge-track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 10; }
+        .gauge-arc { fill: none; stroke: var(--primary); stroke-width: 10; stroke-linecap: round; stroke-dasharray: 339.292; stroke-dashoffset: 339.292; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.6s ease, stroke 0.4s ease; }
+        .gauge-arc.warn { stroke: var(--warning); }
+        .gauge-arc.danger { stroke: var(--danger); }
+        .gauge-value { font-size: 1.5rem; font-weight: 800; fill: var(--text); }
+        .gauge-label { font-size: 0.62rem; fill: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .gauge-caption { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
+        .gauge-glow { filter: drop-shadow(0 0 6px var(--primary-glow)); }
+
         /* Navigation Tabs */
         .nav-tabs { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--card-border); padding-bottom: 12px; margin-bottom: 24px; }
         .tabs-group { display: flex; gap: 8px; }
@@ -144,7 +157,7 @@ pub fn render_dashboard() -> Html<&'static str> {
             </div>
             <div class="node-status">
                 <span class="dot"></span>
-                <span>99.8% Gateway Uptime</span>
+                <span id="gateway-uptime-badge">Gateway Online</span>
             </div>
         </div>
     </div>
@@ -153,19 +166,19 @@ pub fn render_dashboard() -> Html<&'static str> {
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-label">Configured Providers</div>
-            <div class="stat-val" id="stat-count">17 <span class="sub">Active Pool</span></div>
+            <div class="stat-val" id="stat-count">0 <span class="sub">Active Pool</span></div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">Active Models</div>
-            <div class="stat-val" id="stat-models">450 <span class="sub">• Live Discovering</span></div>
+            <div class="stat-label">Total Requests</div>
+            <div class="stat-val" id="stat-models">0 <span class="sub">• since boot</span></div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">Masked API Keys</div>
-            <div class="stat-val" id="stat-keys">17 <span class="sub" style="color:var(--primary);">100% Masked</span></div>
+            <div class="stat-label">Total Errors</div>
+            <div class="stat-val" id="stat-keys">0 <span class="sub" style="color:var(--primary);">error rate</span></div>
         </div>
         <div class="stat-card">
             <div class="stat-label">Gateway Uptime</div>
-            <div class="stat-val" style="color:var(--success);">99.8% <span class="sub">30 Days</span></div>
+            <div class="stat-val" id="stat-uptime" style="color:var(--success);">0s <span class="sub"></span></div>
         </div>
     </div>
 
@@ -188,9 +201,12 @@ pub fn render_dashboard() -> Html<&'static str> {
     <div id="view-catalog" class="table-container" style="display:none;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <h3 id="catalog-title" style="color:var(--primary); font-size:1.1rem;">📚 Catalogo Modelli Sincronizzato</h3>
-            <div style="display:flex; gap:10px;">
-                <input type="text" id="catalog-search" placeholder="Filtra modelli..." oninput="filterCatalog()" style="width:220px; padding:6px 12px;">
-                <select id="catalog-filter" onchange="filterCatalog()" style="width:140px; padding:6px 12px;">
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <input type="text" id="catalog-search" placeholder="Filtra modelli..." oninput="filterCatalog()" style="width:200px; padding:6px 12px;">
+                <select id="catalog-source" onchange="switchCatalogSource()" style="width:170px; padding:6px 12px;">
+                    <option value="all">Tutte le sorgenti</option>
+                </select>
+                <select id="catalog-filter" onchange="filterCatalog()" style="width:130px; padding:6px 12px;">
                     <option value="all">Tutti i tipi</option>
                     <option value="free">Solo Gratuiti</option>
                 </select>
@@ -227,66 +243,90 @@ pub fn render_dashboard() -> Html<&'static str> {
                     <span class="live-pulse"></span> SYSTEM POLLING (2s)
                 </div>
             </div>
-            <div class="telemetry-grid">
-                <div class="telemetry-box">
-                    <div class="telemetry-label">
-                        <span>RTX 2070 GPU & SYSTEM LOAD</span>
-                        <strong id="telemetry-gpu-pct" style="color:var(--primary);">45%</strong>
-                    </div>
-                    <div class="gauge-bar">
-                        <div class="gauge-fill" id="telemetry-gpu-bar" style="width: 45%;"></div>
-                    </div>
-                    <div style="font-size:0.75rem; color:var(--muted); margin-top:10px; font-family:monospace; display:flex; justify-content:space-between;">
-                        <span>Node: beellama-tailscale-2070</span>
-                        <span id="telemetry-mem-val">RAM: 42%</span>
-                    </div>
+            <div class="gauge-cluster">
+                <!-- GPU Utilization -->
+                <div class="gauge-item">
+                    <svg class="gauge-svg" viewBox="0 0 120 120">
+                        <circle class="gauge-track" cx="60" cy="60" r="54"></circle>
+                        <circle class="gauge-arc" id="gauge-gpu-arc" cx="60" cy="60" r="54"></circle>
+                        <text class="gauge-value" id="gauge-gpu-val" x="60" y="58" text-anchor="middle" dominant-baseline="middle">0%</text>
+                        <text class="gauge-label" x="60" y="76" text-anchor="middle">GPU</text>
+                    </svg>
+                    <div class="gauge-caption" id="gauge-gpu-temp">🌡️ —</div>
                 </div>
-                <div class="telemetry-box">
-                    <div class="telemetry-label">
-                        <span>GATEWAY LATENCY SPARKLINE (MS)</span>
-                        <strong id="telemetry-latency-val" style="color:var(--success);">14 ms</strong>
-                    </div>
-                    <div class="sparkline-box" id="telemetry-sparkline" style="height: 48px;">
-                        <div class="spark-bar" style="height: 40%;"></div>
-                        <div class="spark-bar" style="height: 60%;"></div>
-                        <div class="spark-bar" style="height: 35%;"></div>
-                        <div class="spark-bar" style="height: 50%;"></div>
-                        <div class="spark-bar" style="height: 75%;"></div>
-                        <div class="spark-bar" style="height: 45%;"></div>
-                        <div class="spark-bar" style="height: 90%;"></div>
-                        <div class="spark-bar active" style="height: 55%;"></div>
-                    </div>
+                <!-- VRAM -->
+                <div class="gauge-item">
+                    <svg class="gauge-svg" viewBox="0 0 120 120">
+                        <circle class="gauge-track" cx="60" cy="60" r="54"></circle>
+                        <circle class="gauge-arc" id="gauge-vram-arc" cx="60" cy="60" r="54"></circle>
+                        <text class="gauge-value" id="gauge-vram-val" x="60" y="58" text-anchor="middle" dominant-baseline="middle">0%</text>
+                        <text class="gauge-label" x="60" y="76" text-anchor="middle">VRAM</text>
+                    </svg>
+                    <div class="gauge-caption" id="gauge-vram-detail">— / — GB</div>
+                </div>
+                <!-- RAM sistema -->
+                <div class="gauge-item">
+                    <svg class="gauge-svg" viewBox="0 0 120 120">
+                        <circle class="gauge-track" cx="60" cy="60" r="54"></circle>
+                        <circle class="gauge-arc" id="gauge-ram-arc" cx="60" cy="60" r="54"></circle>
+                        <text class="gauge-value" id="gauge-ram-val" x="60" y="58" text-anchor="middle" dominant-baseline="middle">0%</text>
+                        <text class="gauge-label" x="60" y="76" text-anchor="middle">RAM</text>
+                    </svg>
+                    <div class="gauge-caption">sistema host</div>
+                </div>
+                <!-- Error rate -->
+                <div class="gauge-item">
+                    <svg class="gauge-svg" viewBox="0 0 120 120">
+                        <circle class="gauge-track" cx="60" cy="60" r="54"></circle>
+                        <circle class="gauge-arc" id="gauge-err-arc" cx="60" cy="60" r="54"></circle>
+                        <text class="gauge-value" id="gauge-err-val" x="60" y="58" text-anchor="middle" dominant-baseline="middle">0%</text>
+                        <text class="gauge-label" x="60" y="76" text-anchor="middle">ERRORI</text>
+                    </svg>
+                    <div class="gauge-caption" id="gauge-err-detail">0 errori</div>
+                </div>
+                <!-- Latenza con ago -->
+                <div class="gauge-item">
+                    <svg class="gauge-svg" viewBox="0 0 120 120">
+                        <circle class="gauge-track" cx="60" cy="60" r="54"></circle>
+                        <circle class="gauge-arc" id="gauge-lat-arc" cx="60" cy="60" r="54"></circle>
+                        <text class="gauge-value" id="gauge-lat-val" x="60" y="58" text-anchor="middle" dominant-baseline="middle">0</text>
+                        <text class="gauge-label" x="60" y="76" text-anchor="middle">LATENZA ms</text>
+                    </svg>
+                    <div class="gauge-caption" id="gauge-lat-detail">media — · max —</div>
+                </div>
+                <!-- Richieste -->
+                <div class="gauge-item">
+                    <svg class="gauge-svg" viewBox="0 0 120 120">
+                        <circle class="gauge-track" cx="60" cy="60" r="54"></circle>
+                        <circle class="gauge-arc" id="gauge-req-arc" cx="60" cy="60" r="54"></circle>
+                        <text class="gauge-value" id="gauge-req-val" x="60" y="58" text-anchor="middle" dominant-baseline="middle">0</text>
+                        <text class="gauge-label" x="60" y="76" text-anchor="middle">RICHIESTE</text>
+                    </svg>
+                    <div class="gauge-caption" id="gauge-req-detail">uptime —</div>
+                </div>
+            </div>
+            <div class="telemetry-box" style="margin-top:16px;">
+                <div class="telemetry-label">
+                    <span>LATENZA — SPARKLINE (ultimi 60)</span>
+                    <span id="telemetry-latency-val" style="color:var(--success);">— ms</span>
+                </div>
+                <div style="font-size:0.75rem; color:var(--muted); margin-bottom:6px; font-family:monospace; display:flex; justify-content:space-between;">
+                    <span>media: <span id="telemetry-latency-avg">—</span> ms</span>
+                    <span>max: <span id="telemetry-latency-max">—</span> ms</span>
+                </div>
+                <div class="sparkline-box" id="telemetry-sparkline" style="height: 48px;">
+                    <div class="spark-bar" style="height: 10%;"></div>
+                </div>
+            </div>
+            <div class="telemetry-box" style="margin-top:16px;">
+                <div class="telemetry-label">
+                    <span>PROVIDER HEALTH (ultima latenza / errori)</span>
+                </div>
+                <div style="font-size:0.78rem; margin-top:8px; font-family:monospace;">
+                    <div id="telemetry-providers-table" style="color:var(--muted);">Nessun dato ancora — attendi le prime richieste.</div>
                 </div>
             </div>
         </div>
-    </div>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <h3 id="catalog-title" style="color:var(--primary); font-size:1.1rem;">📚 Catalogo Modelli Sincronizzato</h3>
-            <div style="display:flex; gap:10px;">
-                <input type="text" id="catalog-search" placeholder="Filtra modelli..." oninput="filterCatalog()" style="width:220px; padding:6px 12px;">
-                <select id="catalog-filter" onchange="filterCatalog()" style="width:140px; padding:6px 12px;">
-                    <option value="all">Tutti i tipi</option>
-                    <option value="free">Solo Gratuiti</option>
-                </select>
-                <button class="btn-add" style="padding:6px 12px; font-size:0.8rem;" onclick="syncCatalog()">🔄 Sincronizza Ora</button>
-            </div>
-        </div>
-        <table>
-            <thead>
-                <tr>
-                    <th>Modello ID</th>
-                    <th>Sorgente</th>
-                    <th>Costo Prompt (1M)</th>
-                    <th>Costo Completion (1M)</th>
-                    <th>Contesto</th>
-                    <th>Stato</th>
-                    <th>Azione</th>
-                </tr>
-            </thead>
-            <tbody id="catalog-body">
-                <!-- Rendered dynamically -->
-            </tbody>
-        </table>
     </div>
 
     <!-- Modal Form: Add / Edit Provider -->
@@ -607,7 +647,6 @@ pub fn render_dashboard() -> Html<&'static str> {
                     const matchedPreset = Object.keys(PRESETS).find(k => p.name.toLowerCase().includes(k) || p.base_url.toLowerCase().includes(k)) || 'openai';
                     const iconColor = PROVIDER_COLORS[matchedPreset] || '#38bdf8';
                     const svgIcon = PROVIDER_SVGS[matchedPreset] || `<span style="font-weight:bold; font-size:1.1rem;">${escapeHtml(p.name.charAt(0).toUpperCase())}</span>`;
-
                     const maskedKey = p.api_key ? escapeHtml(p.api_key) : 'Nessuna Chiave (Pubblico)';
                     const tagsHtml = (p.tags || []).map(t => `<span style="background:var(--bg); border:1px solid var(--card-border); padding:2px 6px; border-radius:4px; font-size:0.7rem;">${escapeHtml(t)}</span>`).join(' ');
 
@@ -729,10 +768,10 @@ pub fn render_dashboard() -> Html<&'static str> {
         async function saveProvider(e) {
             e.preventDefault();
             const editId = document.getElementById('p-id').value;
-            
-            if (editId) {
-                await fetch(`/providers/${editId}`, { method: 'DELETE', headers: getAuthHeaders() });
-            }
+
+            // NB: non facciamo più DELETE+POST per l'edit. Il POST con lo stesso
+            // nome aggiorna (INSERT OR REPLACE) e il backend preserva la chiave
+            // se il campo arriva mascherato/vuoto. Questo evita di perdere l'id.
 
             const tags = document.getElementById('p-tags').value.split(',').map(t => t.trim()).filter(Boolean);
             const payload = {
@@ -858,10 +897,28 @@ pub fn render_dashboard() -> Html<&'static str> {
                 fullCatalog = data.catalog || [];
                 catalogProvidersMeta = data.catalog_providers || [];
 
+                // Popola il selettore delle sorgenti con i provider del catalogo.
+                const srcSelect = document.getElementById('catalog-source');
+                if (srcSelect) {
+                    srcSelect.innerHTML = '<option value="all">Tutte le sorgenti</option>';
+                    (catalogProvidersMeta || []).forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.key;
+                        opt.textContent = `${p.label || p.key} (${p.count})`;
+                        srcSelect.appendChild(opt);
+                    });
+                }
+
                 document.getElementById('stat-models').innerHTML = `${fullCatalog.length} <span class="sub">• Synchronized</span>`;
             } catch(e) {
                 console.error("Errore caricamento catalogo:", e);
             }
+        }
+
+        function switchCatalogSource() {
+            const srcSelect = document.getElementById('catalog-source');
+            currentCatalogSource = srcSelect ? srcSelect.value : 'all';
+            filterCatalog();
         }
 
         function filterCatalog() {
@@ -882,7 +939,9 @@ pub fn render_dashboard() -> Html<&'static str> {
                 return;
             }
 
-            filtered.slice(0, 200).forEach(m => {
+            // Mostra fino a 500 righe: senza questo limite Groq/OpenRouter
+            // restavano invisibili dietro le sorgenti con molti modelli (custom).
+            filtered.slice(0, 500).forEach(m => {
                 const isFreeBadge = m.is_free ? '<span class="badge badge-free">FREE</span>' : '<span class="badge badge-paid">PAID</span>';
                     const sourceBadge = `<span class="badge" style="background:rgba(56,189,248,0.2); color:#38bdf8;">${escapeHtml(m.provider_name)}</span>`;
                 const ctx = (m.context_length / 1024).toFixed(0) + 'k';
@@ -941,35 +1000,132 @@ pub fn render_dashboard() -> Html<&'static str> {
             loadCatalog();
         }
 
-        let sparklineHistory = [40, 55, 30, 60, 45, 80, 50, 65];
+        // Aggiorna un gauge circolare: pct 0-100, classe warn/danger opzionale.
+        function setGauge(arcId, valId, pct, color) {
+            const arc = document.getElementById(arcId);
+            if (!arc) return;
+            const C = 339.292; // 2 * PI * 54
+            const clamped = Math.max(0, Math.min(100, pct));
+            arc.style.strokeDashoffset = C * (1 - clamped / 100);
+            arc.classList.remove('warn', 'danger');
+            if (color) { arc.style.stroke = color; }
+            else if (clamped > 80) { arc.classList.add('danger'); }
+            else if (clamped > 60) { arc.classList.add('warn'); }
+            else { arc.style.stroke = ''; }
+            const el = document.getElementById(valId);
+            if (el) el.textContent = Math.round(clamped) + '%';
+        }
 
         async function loadLiveStats() {
             try {
                 const res = await fetch('/stats');
                 const data = await res.json();
-                if (data) {
-                    if (data.gpu_utilization_pct !== undefined) {
-                        document.getElementById('telemetry-gpu-pct').innerText = data.gpu_utilization_pct + '%';
-                        document.getElementById('telemetry-gpu-bar').style.width = data.gpu_utilization_pct + '%';
-                    }
-                    if (data.system_memory_used_pct !== undefined) {
-                        document.getElementById('telemetry-mem-val').innerText = 'RAM: ' + data.system_memory_used_pct + '%';
-                    }
-                    if (data.last_latency_ms !== undefined) {
-                        document.getElementById('telemetry-latency-val').innerText = data.last_latency_ms + ' ms';
-                        sparklineHistory.shift();
-                        sparklineHistory.push(Math.min(100, Math.max(15, data.last_latency_ms)));
+                if (!data) return;
 
-                        const sparkBox = document.getElementById('telemetry-sparkline');
-                        if (sparkBox) {
-                            sparkBox.innerHTML = '';
-                            sparklineHistory.forEach((val, idx) => {
-                                const isLast = idx === sparklineHistory.length - 1;
-                                const cls = isLast ? 'spark-bar active' : (val > 60 ? 'spark-bar high' : 'spark-bar');
-                                sparkBox.innerHTML += `<div class="${cls}" style="height:${val}%;"></div>`;
-                            });
-                        }
+                // GPU reale dal nodo beellama — gauges analogici
+                const gpu = data.gpu;
+                if (gpu && gpu.utilization_pct !== undefined) {
+                    setGauge('gauge-gpu-arc', 'gauge-gpu-val', gpu.utilization_pct);
+                }
+                if (gpu && gpu.temperature_c !== undefined) {
+                    document.getElementById('gauge-gpu-temp').innerText = '🌡️ ' + Math.round(gpu.temperature_c) + '°C';
+                }
+                if (gpu && gpu.memory_used_mib !== undefined && gpu.memory_total_mib) {
+                    const pct = (gpu.memory_used_mib / gpu.memory_total_mib) * 100;
+                    setGauge('gauge-vram-arc', 'gauge-vram-val', pct);
+                    document.getElementById('gauge-vram-detail').innerText =
+                        (gpu.memory_used_mib / 1024).toFixed(1) + ' / ' + (gpu.memory_total_mib / 1024).toFixed(1) + ' GB';
+                }
+                if (data.system_memory_used_pct !== undefined) {
+                    setGauge('gauge-ram-arc', 'gauge-ram-val', data.system_memory_used_pct);
+                }
+                if (data.error_rate !== undefined) {
+                    setGauge('gauge-err-arc', 'gauge-err-val', data.error_rate);
+                    document.getElementById('gauge-err-detail').innerText = data.total_errors + ' errori';
+                }
+                if (data.last_latency_ms !== undefined) {
+                    // latenza: scala logica 0-3000ms sul quadrante
+                    const pct = Math.min(100, (data.last_latency_ms / 3000) * 100);
+                    setGauge('gauge-lat-arc', 'gauge-lat-val', pct);
+                    document.getElementById('gauge-lat-val').textContent = data.last_latency_ms;
+                }
+                if (data.avg_latency_ms !== undefined && data.max_latency_ms !== undefined) {
+                    document.getElementById('gauge-lat-detail').innerText = 'media ' + data.avg_latency_ms + ' · max ' + data.max_latency_ms + ' ms';
+                }
+                if (data.total_requests !== undefined) {
+                    const pct = Math.min(100, data.total_requests); // richieste: non percentuale, mostriamo valore
+                    setGauge('gauge-req-arc', 'gauge-req-val', pct, '#818cf8');
+                    document.getElementById('gauge-req-val').textContent = data.total_requests;
+                }
+                if (data.uptime_human) {
+                    document.getElementById('gauge-req-detail').innerText = 'uptime ' + data.uptime_human;
+                    document.getElementById('telemetry-uptime').innerText = data.uptime_human;
+                    document.getElementById('stat-uptime').innerHTML = `${data.uptime_human} <span class="sub">online</span>`;
+                    document.getElementById('gateway-uptime-badge').innerText = 'Gateway Online · ' + data.uptime_human;
+                }
+                if (data.providers_count !== undefined) {
+                    document.getElementById('telemetry-providers').innerText = data.providers_count;
+                    document.getElementById('stat-count').innerHTML = `${data.providers_count} <span class="sub">Active Pool</span>`;
+                }
+
+                // Latenza sparkline dal ring reale
+                if (Array.isArray(data.latency_ring) && data.latency_ring.length > 0) {
+                    const max = Math.max(...data.latency_ring, 1);
+                    const sparkBox = document.getElementById('telemetry-sparkline');
+                    if (sparkBox) {
+                        sparkBox.innerHTML = '';
+                        data.latency_ring.forEach((val, idx) => {
+                            const h = Math.max(6, Math.min(100, (val / max) * 100));
+                            const isLast = idx === data.latency_ring.length - 1;
+                            const cls = isLast ? 'spark-bar active' : (val > 1000 ? 'spark-bar high' : 'spark-bar');
+                            sparkBox.innerHTML += `<div class="${cls}" style="height:${h}%;"></div>`;
+                        });
                     }
+                }
+                if (data.last_latency_ms !== undefined) {
+                    document.getElementById('telemetry-latency-val').innerText = data.last_latency_ms + ' ms';
+                }
+                if (data.avg_latency_ms !== undefined) {
+                    document.getElementById('telemetry-latency-avg').innerText = data.avg_latency_ms;
+                }
+                if (data.max_latency_ms !== undefined) {
+                    document.getElementById('telemetry-latency-max').innerText = data.max_latency_ms;
+                }
+                if (data.total_requests !== undefined) {
+                    document.getElementById('telemetry-total-req').innerText = data.total_requests;
+                    document.getElementById('stat-models').innerHTML = `${data.total_requests} <span class="sub">• since boot</span>`;
+                }
+                if (data.total_errors !== undefined) {
+                    document.getElementById('telemetry-total-err').innerText = data.total_errors;
+                    document.getElementById('stat-keys').innerHTML = `${data.total_errors} <span class="sub" style="color:var(--primary);">errori</span>`;
+                }
+                if (data.error_rate !== undefined) {
+                    document.getElementById('telemetry-error-rate').innerText = data.error_rate + '%';
+                }
+                if (data.error_rate !== undefined && data.error_rate < 10) {
+                    document.getElementById('telemetry-health').innerText = 'Healthy';
+                    document.getElementById('telemetry-health').style.color = 'var(--success)';
+                } else if (data.error_rate !== undefined && data.error_rate < 40) {
+                    document.getElementById('telemetry-health').innerText = 'Degraded';
+                    document.getElementById('telemetry-health').style.color = 'var(--warning)';
+                } else if (data.error_rate !== undefined) {
+                    document.getElementById('telemetry-health').innerText = 'Critical';
+                    document.getElementById('telemetry-health').style.color = 'var(--danger)';
+                }
+
+                // Tabella provider
+                const pt = document.getElementById('telemetry-providers-table');
+                if (pt && data.providers && Object.keys(data.providers).length > 0) {
+                    const rows = Object.entries(data.providers)
+                        .sort((a,b) => b[1].requests - a[1].requests)
+                        .map(([name, st]) => {
+                            const rate = st.error_rate > 0 ? `<span style="color:var(--danger);">${st.error_rate}% err</span>` : '<span style="color:var(--success);">ok</span>';
+                            return `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.04);">
+                                <span>${escapeHtml(name)}</span>
+                                <span>${st.requests} req · ${st.last_latency_ms}ms · ${rate}</span>
+                            </div>`;
+                        }).join('');
+                    pt.innerHTML = rows;
                 }
             } catch(e) {
                 console.error("Errore telemetria:", e);

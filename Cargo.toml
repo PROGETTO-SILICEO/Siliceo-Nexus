@@ -7,11 +7,14 @@ description = "Universal Multimodal Inference Gateway & Task-Aware Mesh Engine"
 
 [dependencies]
 axum = "0.7"
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-util = "0.3"
+bytes = "1.5"
 tokio = { version = "1.38", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
