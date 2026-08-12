@@ -67,27 +67,43 @@ pub fn classify_intent(request: &LLMRequest) -> IntentTag {
     IntentTag::Reasoning
 }
 
-/// Seleziona la lista ordinata dei provider idonei per la cascata di failover
+/// Seleziona la lista ordinata dei provider idonei per la cascata di failover.
+/// `mem_cooldowns` è la mappa in-memory dei cooldown attivi (prioritaria sul campo DB).
 pub async fn select_eligible_providers(
     providers: &Arc<RwLock<Vec<Provider>>>,
+    mem_cooldowns: Option<&Arc<RwLock<std::collections::HashMap<String, chrono::DateTime<chrono::Utc>>>>>,
     intent: IntentTag,
     requires_tools: bool,
 ) -> Vec<Provider> {
     let list = providers.read().await;
     let required_tag = intent.as_str();
+    let now = chrono::Utc::now();
 
     info!("🎯 Intent classificato: '{}' (requires_tools: {})", required_tag, requires_tools);
+
+    let mem_map: std::collections::HashMap<String, chrono::DateTime<chrono::Utc>> = match mem_cooldowns {
+        Some(m) => m.read().await.clone(),
+        None => std::collections::HashMap::new(),
+    };
+
+    let in_cooldown = |p: &Provider| -> bool {
+        if let Some(until) = mem_map.get(&p.name) {
+            if now < *until { return true; }
+        }
+        if let Some(ref cooldown) = p.cooldown_until {
+            if let Ok(until) = chrono::DateTime::parse_from_rfc3339(cooldown) {
+                if now < until { return true; }
+            }
+        }
+        false
+    };
 
     let mut eligible = Vec::new();
 
     // 1. Aggiungi provider con tag specifico o general
     for p in list.iter() {
         if !p.enabled { continue; }
-        if let Some(ref cooldown) = p.cooldown_until {
-            if let Ok(until) = chrono::DateTime::parse_from_rfc3339(cooldown) {
-                if chrono::Utc::now() < until { continue; }
-            }
-        }
+        if in_cooldown(p) { continue; }
         if requires_tools && !p.tags.contains(&"tool_supported".to_string()) { continue; }
 
         if p.tags.contains(&required_tag.to_string()) || p.tags.contains(&"general".to_string()) {
@@ -95,11 +111,13 @@ pub async fn select_eligible_providers(
         }
     }
 
-    // 2. Aggiungi i rimanenti abilitati per il fallback
+    // 2. Aggiungi i rimanenti abilitati per il fallback (rispettando requires_tools)
     for p in list.iter() {
-        if p.enabled && !eligible.iter().any(|e| e.name == p.name) {
-            eligible.push(p.clone());
-        }
+        if !p.enabled { continue; }
+        if eligible.iter().any(|e| e.name == p.name) { continue; }
+        if in_cooldown(p) { continue; }
+        if requires_tools && !p.tags.contains(&"tool_supported".to_string()) { continue; }
+        eligible.push(p.clone());
     }
 
     eligible
@@ -108,10 +126,11 @@ pub async fn select_eligible_providers(
 /// Seleziona il miglior provider singolo disponibile
 pub async fn select_provider(
     providers: &Arc<RwLock<Vec<Provider>>>,
+    mem_cooldowns: Option<&Arc<RwLock<std::collections::HashMap<String, chrono::DateTime<chrono::Utc>>>>>,
     intent: IntentTag,
     requires_tools: bool,
 ) -> Result<Provider, String> {
-    let eligible = select_eligible_providers(providers, intent, requires_tools).await;
+    let eligible = select_eligible_providers(providers, mem_cooldowns, intent, requires_tools).await;
     if let Some(first) = eligible.first() {
         info!("✅ Selezionato provider primario '{}' (model: {})", first.name, first.model);
         Ok(first.clone())

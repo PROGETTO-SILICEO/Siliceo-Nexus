@@ -54,12 +54,21 @@ pub struct LLMRequest {
     pub temperature: Option<f32>,
     pub stream: Option<bool>,
     pub tools: Option<serde_json::Value>,
+    pub stop: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Message {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    /// Nome della funzione (per Gemini: function_response.name richiesto)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
+    /// Tool calls in formato OpenAI (assistant message): [{"id","type","function":{...}}]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls_json: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -71,6 +80,17 @@ pub struct LLMResponse {
     pub choices: Vec<Choice>,
     pub usage: UsageInfo,
     pub provider_used: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ToolCall {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub call_type: String,
+    pub name: String,
+    pub input: serde_json::Value,
 }
 
 #[derive(Debug, Serialize)]

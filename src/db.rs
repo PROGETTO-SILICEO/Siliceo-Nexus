@@ -146,7 +146,11 @@ async fn seed_default_providers(pool: &SqlitePool) -> anyhow::Result<()> {
             model: "Qwen3.5-4B-Q6_K.gguf".to_string(),
             priority: 1,
             tier: "local".to_string(),
-            tags: vec!["chitchat".into(), "fast".into(), "local".into(), "tool_supported".into()],
+            // beellama (Qwen 4B, context 8192) NON supporta i tools di Claude Code:
+            // 28 tool definitions = ~28k token > 8k context. Senza tool_supported
+            // non viene selezionato per le richieste con tools (evita il 400
+            // "exceeds the available context size").
+            tags: vec!["chitchat".into(), "fast".into(), "local".into()],
             tpm_limit: 100000,
             rpm_limit: 60,
             enabled: true,
@@ -157,7 +161,7 @@ async fn seed_default_providers(pool: &SqlitePool) -> anyhow::Result<()> {
             base_url: "https://openrouter.ai/api/v1".to_string(),
             api_key: std::env::var("OPENROUTER_API_KEY").ok(),
             auth_type: "bearer".to_string(),
-            model: "openrouter/free-models".to_string(),
+            model: "qwen/qwen-2.5-coder-32b:free".to_string(),
             priority: 2,
             tier: "free".to_string(),
             tags: vec!["coding".into(), "reasoning".into(), "cloud_free".into(), "tool_supported".into()],
@@ -191,18 +195,24 @@ async fn seed_default_providers(pool: &SqlitePool) -> anyhow::Result<()> {
 pub async fn insert_provider_db(pool: &SqlitePool, p: &ProviderInput) -> anyhow::Result<i64> {
     let mut final_api_key = p.api_key.clone();
 
-    // Se la chiave è mascherata o vuota durante una modifica, preserviamo quella esistente nel DB!
-    if let Some(ref k) = final_api_key {
-        if k.contains("...") || k.contains('•') || k.trim().is_empty() {
-            let existing: Option<(Option<String>,)> = sqlx::query_as(
-                "SELECT api_key FROM providers WHERE name = ?"
-            )
-            .bind(&p.name)
-            .fetch_optional(pool)
-            .await
-            .unwrap_or(None);
+    // Se la chiave è mascherata, vuota O assente durante una modifica,
+    // preserviamo quella esistente nel DB. Evita di azzerare credenziali
+    // quando il frontend salva un provider senza rileggere la chiave.
+    let needs_preserve = match &final_api_key {
+        None => true,
+        Some(k) => k.contains("...") || k.contains('•') || k.trim().is_empty(),
+    };
+    if needs_preserve {
+        let existing: Option<(Option<String>,)> = sqlx::query_as(
+            "SELECT api_key FROM providers WHERE name = ?"
+        )
+        .bind(&p.name)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
 
-            if let Some((Some(old_key),)) = existing {
+        if let Some((Some(old_key),)) = existing {
+            if !old_key.trim().is_empty() {
                 final_api_key = Some(old_key);
             }
         }
@@ -263,4 +273,29 @@ pub async fn load_all_providers(pool: &SqlitePool) -> Vec<Provider> {
             cooldown_until: r.get("cooldown_until"),
         }
     }).collect()
+}
+
+/// Persiste l'uso di un provider (fire-and-forget) per statistiche e costi.
+pub async fn insert_usage_log(
+    pool: &sqlx::SqlitePool,
+    provider_name: &str,
+    model_id: &str,
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    cost_estimated_usd: f64,
+    intent_tag: &str,
+) -> anyhow::Result<()> {
+    sqlx::query(
+        "INSERT INTO usage_log (provider_name, model_id, prompt_tokens, completion_tokens, cost_estimated_usd, intent_tag)
+         VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .bind(provider_name)
+    .bind(model_id)
+    .bind(prompt_tokens as i64)
+    .bind(completion_tokens as i64)
+    .bind(cost_estimated_usd)
+    .bind(intent_tag)
+    .execute(pool)
+    .await?;
+    Ok(())
 }

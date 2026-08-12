@@ -18,6 +18,7 @@ pub struct AppState {
     pub models_dir: PathBuf,
     pub beellama_bin: String,
     pub internal_port: u16,
+    pub context_size: u32,
     pub active_process: Arc<Mutex<Option<tokio::process::Child>>>,
     pub active_model: Arc<Mutex<String>>,
     pub client: reqwest::Client,
@@ -56,11 +57,17 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "8081".to_string())
         .parse::<u16>()
         .unwrap_or(8081);
+    // Context size configurabile via env (default 8192; gemma-4-E4B vuole 65536)
+    let context_size = std::env::var("BEELLAMA_CONTEXT")
+        .unwrap_or_else(|_| "8192".to_string())
+        .parse::<u32>()
+        .unwrap_or(8192);
 
     let state = AppState {
         models_dir,
         beellama_bin,
         internal_port,
+        context_size,
         active_process: Arc::new(Mutex::new(None)),
         active_model: Arc::new(Mutex::new("none".to_string())),
         client: reqwest::Client::builder()
@@ -144,6 +151,10 @@ async fn handle_switch_model(
     if model_name.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "Nome modello non specificato".to_string()));
     }
+    // Sanitizzazione path traversal: blocca componenti pericolose
+    if model_name.contains("..") || model_name.contains('/') || model_name.contains('\\') {
+        return Err((StatusCode::BAD_REQUEST, "Nome modello non valido (path traversal bloccato)".to_string()));
+    }
 
     let target_path = state.models_dir.join(model_name);
     if !target_path.exists() {
@@ -157,9 +168,26 @@ async fn handle_switch_model(
     let mut proc_lock = state.active_process.lock().await;
     if let Some(mut child) = proc_lock.take() {
         let _ = child.kill().await;
+        let _ = child.wait().await;
     }
 
+    // Fallback robusto: uccidi QUALSIASI llama-server esistente sulla porta interna.
+    // Copre il caso in cui il processo precedente è stato avviato prima di questo
+    // switcher (es. dopo un riavvio del servizio) e non è nel nostro Child state.
+    let port = state.internal_port;
+    let _ = tokio::process::Command::new("pkill")
+        .arg("-f")
+        .arg(format!("llama-server.*--port {}", port))
+        .status()
+        .await;
+    // Attendi che la VRAM si liberi
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+
     info!("🚀 Avvio nuovo modello su RTX 2070 GPU: '{}'", model_name);
+    // Context PER MODELLO: gemma-4-E4B supporta 64k, qwen-coder 7B 32k,
+    // gli altri restano al default. Un context troppo alto su 8GB VRAM
+    // impedisce il caricamento (KV cache enorme).
+    let model_ctx = context_for_model(model_name, state.context_size);
     let child_res = tokio::process::Command::new(&state.beellama_bin)
         .arg("--model")
         .arg(&target_path)
@@ -170,7 +198,7 @@ async fn handle_switch_model(
         .arg("-ngl")
         .arg("99")
         .arg("-c")
-        .arg("8192")
+        .arg(model_ctx.to_string())
         .spawn();
 
     match child_res {
@@ -179,13 +207,27 @@ async fn handle_switch_model(
             let mut active_lock = state.active_model.lock().await;
             *active_lock = model_name.to_string();
 
-            info!("✅ Processo beellama riavviato con successo per '{}'", model_name);
-            Ok(Json(serde_json::json!({
-                "status": "switched",
-                "model": model_name,
-                "path": target_path.to_string_lossy(),
-                "internal_port": state.internal_port
-            })))
+            // Readiness check: attendi che il server interno ascolti prima di rispondere
+            let port = state.internal_port;
+            let ready = tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                wait_for_server(port),
+            )
+            .await;
+
+            match ready {
+                Ok(true) => {
+                    info!("✅ Processo beellama riavviato con successo per '{}' (server pronto)", model_name);
+                    Ok(Json(serde_json::json!({
+                        "status": "switched",
+                        "model": model_name,
+                        "path": target_path.to_string_lossy(),
+                        "internal_port": state.internal_port
+                    })))
+                }
+                Ok(false) => Err((StatusCode::GATEWAY_TIMEOUT, "Modello avviato ma server non pronto in tempo".to_string())),
+                Err(_) => Err((StatusCode::GATEWAY_TIMEOUT, "Timeout attesa server modello".to_string())),
+            }
         }
         Err(e) => {
             error!("❌ Errore nell'avvio di beellama: {}", e);
@@ -218,10 +260,44 @@ async fn handle_proxy_chat(
         .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Errore inoltro a beellama: {}", e)))?;
 
     let status = resp.status();
-    let resp_bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Errore lettura risposta beellama: {}", e)))?;
 
-    Ok((status, resp_bytes))
+    // Pass-through in streaming: NON bufferizzare con bytes() che rompe lo SSE.
+    // Se il client chiede stream, inoltriamo lo stream bytes così com'è.
+    let stream = resp.bytes_stream();
+    let body = axum::body::Body::from_stream(stream);
+    let mut response = axum::response::Response::builder()
+        .status(status)
+        .header("content-type", "text/event-stream")
+        .header("cache-control", "no-cache")
+        .header("x-accel-buffering", "no")
+        .body(body)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    response.headers_mut().insert("x-accel-buffering", "no".parse().unwrap());
+    Ok(response)
+}
+
+/// Attende che il server interno ascolti sulla porta data (readiness check).
+/// Context per modello. gemma-4-E4B supporta 64k; qwen2.5-coder 32k;
+/// gli altri (Qwen 3.5 4B/9B/35B, wizard) restano al default della config.
+/// Un context troppo alto su 8GB VRAM impedisce il load (KV cache).
+fn context_for_model(model_name: &str, default_ctx: u32) -> u32 {
+    let lower = model_name.to_lowercase();
+    if lower.contains("gemma") || lower.contains("e4b") {
+        65536
+    } else if lower.contains("qwen2.5-coder") || lower.contains("coder-7b") {
+        32768
+    } else {
+        default_ctx
+    }
+}
+
+async fn wait_for_server(port: u16) -> bool {
+    for _ in 0..60 {
+        if let Ok(stream) = tokio::net::TcpStream::connect(("127.0.0.1", port)).await {
+            drop(stream);
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    false
 }

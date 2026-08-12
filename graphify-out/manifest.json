@@ -1,0 +1,82 @@
+{
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/beellama-switcher/src/main.rs": {
+    "mtime": 1786392709.4754403,
+    "ast_hash": "ccf110b689dc6c86c978ec795ede69e2",
+    "semantic_hash": "ccf110b689dc6c86c978ec795ede69e2"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/install.ps1": {
+    "mtime": 1786194158.4297276,
+    "ast_hash": "250625887785a3067d9a0e38c6031329",
+    "semantic_hash": "250625887785a3067d9a0e38c6031329"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/install.sh": {
+    "mtime": 1786209303.393383,
+    "ast_hash": "af010701fdf2aaa8f901f77c1fe42f9d",
+    "semantic_hash": "af010701fdf2aaa8f901f77c1fe42f9d"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/src/adapters.rs": {
+    "mtime": 1786392709.5364397,
+    "ast_hash": "5360156a6a04155b12662ffda4c0fd4c",
+    "semantic_hash": "5360156a6a04155b12662ffda4c0fd4c"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/src/catalog.rs": {
+    "mtime": 1786197858.7643151,
+    "ast_hash": "9e625a0212e1c66e6e99fdfd55759a3f",
+    "semantic_hash": "9e625a0212e1c66e6e99fdfd55759a3f"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/src/dashboard.rs": {
+    "mtime": 1786397469.3393507,
+    "ast_hash": "6e95fbea40ac591842d3104c1a07b344",
+    "semantic_hash": "6e95fbea40ac591842d3104c1a07b344"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/src/db.rs": {
+    "mtime": 1786397402.1338847,
+    "ast_hash": "53acadb49a6f386a05fd9b295b5ec08d",
+    "semantic_hash": "53acadb49a6f386a05fd9b295b5ec08d"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/src/main.rs": {
+    "mtime": 1786397807.0445812,
+    "ast_hash": "03117654236815edc5532b2c6665babf",
+    "semantic_hash": "03117654236815edc5532b2c6665babf"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/src/router.rs": {
+    "mtime": 1786392709.5594394,
+    "ast_hash": "7499295fcf52ff3a3e60baa0c9d155b8",
+    "semantic_hash": "7499295fcf52ff3a3e60baa0c9d155b8"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/src/types.rs": {
+    "mtime": 1786392709.5964391,
+    "ast_hash": "322111385083eacaff41ff266548afe8",
+    "semantic_hash": "322111385083eacaff41ff266548afe8"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/README.md": {
+    "mtime": 1786392709.380441,
+    "ast_hash": "f6100538d7006d97f8621d9591870aa6",
+    "semantic_hash": "f6100538d7006d97f8621d9591870aa6"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/README_INTERNAL.md": {
+    "mtime": 1786392709.4324405,
+    "ast_hash": "f50c1d6d330bcfeef31e104320bd24d0",
+    "semantic_hash": "f50c1d6d330bcfeef31e104320bd24d0"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/README_PUBLIC.md": {
+    "mtime": 1786209747.455363,
+    "ast_hash": "f6100538d7006d97f8621d9591870aa6",
+    "semantic_hash": "f6100538d7006d97f8621d9591870aa6"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/assets/architecture_infographic.png": {
+    "mtime": 1786194371.3009453,
+    "ast_hash": "672a5ead1549886ec657023c7d3c101c",
+    "semantic_hash": "672a5ead1549886ec657023c7d3c101c"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/assets/banner.png": {
+    "mtime": 1786124895.6088767,
+    "ast_hash": "f9b68723495edfe76124b2f138088d37",
+    "semantic_hash": "f9b68723495edfe76124b2f138088d37"
+  },
+  "/home/guardiano/Documenti/GitHub/Siliceo-Nexus/assets/dashboard_showcase.png": {
+    "mtime": 1786194371.2969453,
+    "ast_hash": "ad2224303083013de692d34aa625f679",
+    "semantic_hash": "ad2224303083013de692d34aa625f679"
+  }
+}
