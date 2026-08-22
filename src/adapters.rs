@@ -367,9 +367,19 @@ async fn try_gemini_native(
         api_key
     );
 
+    // Mappatura esplicita role/content: i campi tool_* della struct Message
+    // (tool_call_id, tool_name, tool_calls_json) non sono accettati dall'API
+    // native Gemini e anche con skip_serializing_if restano un rischio quando Some.
+    let clean_messages: Vec<serde_json::Value> = request.messages.iter().map(|m| {
+        serde_json::json!({
+            "role": m.role,
+            "content": m.content,
+        })
+    }).collect();
+
     let body = serde_json::json!({
         "model": request.model.as_deref().unwrap_or(&provider.model),
-        "messages": request.messages,
+        "messages": clean_messages,
         "max_tokens": request.max_tokens.unwrap_or(4096),
         "temperature": request.temperature.unwrap_or(0.7),
     });
