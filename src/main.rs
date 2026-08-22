@@ -56,6 +56,22 @@ async fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all("data")?;
     let db = db::init_db(&database_url).await?;
 
+    // Azzera i cooldown scaduti al boot — evita che provider bloccati da
+    // sessioni precedenti restino esclusi dalla cascata (fix task 012)
+    {
+        let now = chrono::Utc::now();
+        match sqlx::query(
+            "UPDATE providers SET cooldown_until = NULL WHERE cooldown_until IS NOT NULL AND cooldown_until < ?1",
+        )
+        .bind(now.to_rfc3339())
+        .execute(&db)
+        .await
+        {
+            Ok(r) => info!("🧹 Azzerati {} cooldown scaduti al boot", r.rows_affected()),
+            Err(e) => warn!("⚠️ Errore azzeramento cooldown: {}", e),
+        }
+    }
+
     // Carica provider in memoria
     let providers_list = db::load_all_providers(&db).await;
     info!("   Loaded {} providers into Siliceo-Nexus memory pool", providers_list.len());
@@ -178,6 +194,13 @@ fn spawn_provider_assessment(state: AppState) {
         loop {
             interval.tick().await;
             let now = chrono::Utc::now();
+
+            // Pulizia cooldown in-memory scaduti (evita accumulo — fix task 012)
+            {
+                let mut map = state.cooldowns.write().await;
+                map.retain(|_, until| *until > now);
+            }
+
             let providers_snapshot = state.providers.read().await.clone();
 
             // Providers senza chiave e con auth_type che la richiede → cooldown 10 min
