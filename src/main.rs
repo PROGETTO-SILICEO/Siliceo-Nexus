@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Json, Path, State},
+    extract::{ConnectInfo, Json, Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{delete, get, post},
@@ -137,9 +137,9 @@ async fn main() -> anyhow::Result<()> {
     ensure_network_auth_is_configured(&addr)?;
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
-    info!("🌐 Siliceo-Nexus listening on http://{}", addr);
+    info!("🌐 Siliceo-Nexus listening on http://{} (mesh fidata senza token)", addr);
 
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
 
     Ok(())
 }
@@ -1036,6 +1036,31 @@ fn same_endpoint_origin(left: &str, right: &str) -> bool {
     }
 }
 
+fn is_trusted_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let o = v4.octets();
+            if o[0] == 100 && (64..=127).contains(&o[1]) {
+                return true;
+            }
+            if o[0] == 127 {
+                return true;
+            }
+            if o[0] == 10 {
+                return true;
+            }
+            if o[0] == 192 && o[1] == 168 {
+                return true;
+            }
+            if o[0] == 172 && (16..=31).contains(&o[1]) {
+                return true;
+            }
+            false
+        }
+        IpAddr::V6(v6) => v6.is_loopback(),
+    }
+}
+
 fn verify_token(headers: &HeaderMap, env_name: &str, label: &str) -> Result<(), (StatusCode, String)> {
     let required_token = match std::env::var(env_name) {
         Ok(t) if !t.trim().is_empty() => t,
@@ -1115,10 +1140,13 @@ fn ensure_network_auth_is_configured(addr: &str) -> anyhow::Result<()> {
 }
 
 async fn list_providers(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    verify_admin_auth(&headers)?;
+    if !is_trusted_ip(peer.ip()) {
+        verify_admin_auth(&headers)?;
+    }
     let list = state.providers.read().await;
     let mut masked_list = Vec::new();
     for p in list.iter() {
