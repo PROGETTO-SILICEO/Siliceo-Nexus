@@ -823,8 +823,16 @@ pub fn render_dashboard() -> Html<&'static str> {
             `;
             try {
                 const res = await fetch(`/providers/${id}/test`, { method: 'POST', headers: getAuthHeaders() });
-                const data = await res.json();
-                if (data.success) {
+                let data;
+                const contentType = res.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    data = await res.json();
+                } else {
+                    const textErr = await res.text();
+                    data = { success: false, error: textErr || `HTTP ${res.status}` };
+                }
+
+                if (res.ok && data.success) {
                     document.getElementById('test-content').innerHTML = `
                         <div style="background:rgba(16,185,129,0.1); border:1px solid var(--success); padding:16px; border-radius:10px;">
                             <p style="color:var(--success); font-weight:bold; margin-bottom:5px;">✅ Test Riuscito! (${data.latency_ms} ms)</p>
@@ -837,16 +845,17 @@ pub fn render_dashboard() -> Html<&'static str> {
                 } else {
                     document.getElementById('test-content').innerHTML = `
                         <div style="background:rgba(239,68,68,0.1); border:1px solid var(--danger); padding:16px; border-radius:10px;">
-                            <p style="color:var(--danger); font-weight:bold; margin-bottom:5px;">❌ Test Fallito (${data.latency_ms} ms)</p>
-                            <p style="font-size:0.85rem;"><strong>Provider:</strong> ${escapeHtml(data.provider_name)}</p>
-                            <p style="font-size:0.85rem; color:var(--danger);"><strong>Errore:</strong> ${escapeHtml(data.error)}</p>
+                            <p style="color:var(--danger); font-weight:bold; margin-bottom:5px;">❌ Test Fallito ${data.latency_ms ? `(${data.latency_ms} ms)` : ''}</p>
+                            <p style="font-size:0.85rem;"><strong>Provider:</strong> ${escapeHtml(data.provider_name || 'ID ' + id)}</p>
+                            <p style="font-size:0.85rem; color:var(--danger);"><strong>Errore:</strong> ${escapeHtml(data.error || 'Errore sconosciuto')}</p>
                         </div>
                     `;
                 }
             } catch(e) {
-                document.getElementById('test-content').innerHTML = `<p style="color:var(--danger)">Errore di rete durante il test: ${escapeHtml(e)}</p>`;
+                document.getElementById('test-content').innerHTML = `<p style="color:var(--danger)">Errore durante il test: ${escapeHtml(e.message || e)}</p>`;
             }
         }
+
 
         function closeTestModal() {
             document.getElementById('test-modal').style.display = 'none';

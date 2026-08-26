@@ -1180,18 +1180,23 @@ async fn list_providers(
 }
 
 async fn create_provider(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     Json(input): Json<ProviderInput>,
-) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
-    verify_admin_auth(&headers)?;
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
+    if !is_trusted_ip(peer.ip()) {
+        if let Err((code, msg)) = verify_admin_auth(&headers) {
+            return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
+        }
+    }
 
     if !is_safe_endpoint_url(&input.base_url).await {
-        return Err((StatusCode::BAD_REQUEST, "⚠️ SSRF Protection: Endpoint non valido o pericoloso.".to_string()));
+        return Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({ "success": false, "error": "⚠️ SSRF Protection: Endpoint non valido o pericoloso." }))));
     }
 
     let id = db::insert_provider_db(&state.db, &input).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, redact_secrets(&e.to_string())))?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "error": redact_secrets(&e.to_string()) }))))?;
 
     let updated = db::load_all_providers(&state.db).await;
     let mut lock = state.providers.write().await;
@@ -1202,14 +1207,19 @@ async fn create_provider(
 }
 
 async fn delete_provider(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     Path(id): Path<i64>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    verify_admin_auth(&headers)?;
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    if !is_trusted_ip(peer.ip()) {
+        if let Err((code, msg)) = verify_admin_auth(&headers) {
+            return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
+        }
+    }
 
     sqlx::query("DELETE FROM providers WHERE id = ?").bind(id).execute(&state.db).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "error": e.to_string() }))))?;
 
     let updated = db::load_all_providers(&state.db).await;
     let mut lock = state.providers.write().await;
@@ -1287,10 +1297,15 @@ async fn handle_get_catalog(
 }
 
 async fn handle_sync_catalog(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    verify_admin_auth(&headers)?;
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    if !is_trusted_ip(peer.ip()) {
+        if let Err((code, msg)) = verify_admin_auth(&headers) {
+            return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
+        }
+    }
     let (or_count, google_count) = catalog::sync_all_catalogs(&state.client, &state.db).await;
 
     Ok(Json(serde_json::json!({
@@ -1302,15 +1317,20 @@ async fn handle_sync_catalog(
 }
 
 async fn handle_test_provider(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<i64>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    verify_admin_auth(&headers)?;
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    if !is_trusted_ip(peer.ip()) {
+        if let Err((code, msg)) = verify_admin_auth(&headers) {
+            return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
+        }
+    }
     let list = state.providers.read().await;
     let target = list.iter().find(|p| p.id == Some(id))
         .cloned()
-        .ok_or((StatusCode::NOT_FOUND, "Provider non trovato".to_string()))?;
+        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(serde_json::json!({ "success": false, "error": "Provider non trovato" }))))?;
 
     drop(list);
 
@@ -1366,19 +1386,24 @@ pub struct SetModelPayload {
 }
 
 async fn handle_set_provider_model(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     Path(id): Path<i64>,
     Json(payload): Json<SetModelPayload>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    verify_admin_auth(&headers)?;
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    if !is_trusted_ip(peer.ip()) {
+        if let Err((code, msg)) = verify_admin_auth(&headers) {
+            return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
+        }
+    }
 
     sqlx::query("UPDATE providers SET model = ? WHERE id = ?")
         .bind(&payload.model)
         .bind(id)
         .execute(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "error": e.to_string() }))))?;
 
     let updated = db::load_all_providers(&state.db).await;
     let mut lock = state.providers.write().await;
@@ -1418,13 +1443,17 @@ fn infer_provider_key(base_url: &str) -> String {
 }
 
 async fn handle_fetch_models(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
     Json(payload): Json<FetchModelsPayload>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    if let Err((code, msg)) = verify_admin_auth(&headers) {
-        return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
+    if !is_trusted_ip(peer.ip()) {
+        if let Err((code, msg)) = verify_admin_auth(&headers) {
+            return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
+        }
     }
+
 
     if !is_safe_endpoint_url(&payload.base_url).await {
         return Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({ "success": false, "error": "⚠️ SSRF Protection: Endpoint non valido o pericoloso." }))));
