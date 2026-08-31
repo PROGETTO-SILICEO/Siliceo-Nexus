@@ -2,6 +2,51 @@
 use crate::types::{Provider, LLMRequest, LLMResponse, Message, Choice, UsageInfo, ToolCall};
 use uuid::Uuid;
 
+/// Normalizza i tools in formato OpenAI (`{"type":"function","function":{name,...}}`).
+/// Accetta sia formato Anthropic (`{"name":..,"input_schema":..}`) che OpenAI
+/// (`{"function":{"name":..,"parameters":..}}`) in ingresso (REVIEW 31/08:
+/// prima il Nexus rompeva i tools OpenAI perché assumeva solo il formato Anthropic).
+fn normalize_tools(tools: &serde_json::Value) -> Option<serde_json::Value> {
+    let tools_arr = tools.as_array()?;
+    let openai_tools: Vec<serde_json::Value> = tools_arr
+        .iter()
+        .filter_map(|t| {
+            let (name, description, parameters) = if t.get("function").is_some() {
+                // Formato OpenAI già pronto
+                let f = &t["function"];
+                (
+                    f.get("name").cloned().unwrap_or(serde_json::Value::Null),
+                    f.get("description").cloned().unwrap_or(serde_json::Value::Null),
+                    f.get("parameters").cloned().unwrap_or(serde_json::Value::Null),
+                )
+            } else {
+                // Formato Anthropic
+                (
+                    t.get("name").cloned().unwrap_or(serde_json::Value::Null),
+                    t.get("description").cloned().unwrap_or(serde_json::Value::Null),
+                    t.get("input_schema").cloned().unwrap_or(serde_json::Value::Null),
+                )
+            };
+            if name.is_null() || !name.is_string() {
+                return None;
+            }
+            Some(serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": description,
+                    "parameters": parameters,
+                }
+            }))
+        })
+        .collect();
+    if openai_tools.is_empty() {
+        None
+    } else {
+        Some(serde_json::json!(openai_tools))
+    }
+}
+
 pub async fn dispatch_request(
     client: &reqwest::Client,
     provider: &Provider,
@@ -228,20 +273,10 @@ async fn try_openai_compatible(
         }
     }
 
-    // Converti tools Anthropic → OpenAI
+    // Normalizza tools (Anthropic o OpenAI) → formato OpenAI per il provider
     if let Some(ref tools) = request.tools {
-        if let Some(tools_arr) = tools.as_array() {
-            let openai_tools: Vec<serde_json::Value> = tools_arr.iter().map(|t| {
-                serde_json::json!({
-                    "type": "function",
-                    "function": {
-                        "name": t["name"],
-                        "description": t["description"],
-                        "parameters": t["input_schema"]
-                    }
-                })
-            }).collect();
-            body["tools"] = serde_json::json!(openai_tools);
+        if let Some(openai_tools) = normalize_tools(tools) {
+            body["tools"] = openai_tools;
         } else {
             body["tools"] = tools.clone();
         }
@@ -268,7 +303,7 @@ async fn try_openai_compatible(
     }
 
     let mut req = client.post(&url)
-        .timeout(std::time::Duration::from_secs(45))
+        .timeout(std::time::Duration::from_secs(20))
         .json(&body);
 
     match provider.auth_type.as_str() {        "bearer" => {
@@ -385,7 +420,7 @@ async fn try_gemini_native(
     });
 
     let resp = client.post(&url)
-        .timeout(std::time::Duration::from_secs(45))
+        .timeout(std::time::Duration::from_secs(20))
         .json(&body)
         .send()
         .await?;

@@ -80,6 +80,7 @@ pub async fn init_db(database_url: &str) -> anyhow::Result<SqlitePool> {
             tags TEXT NOT NULL DEFAULT '[]',
             tpm_limit INTEGER NOT NULL DEFAULT 32000,
             rpm_limit INTEGER NOT NULL DEFAULT 15,
+            max_ctx INTEGER NOT NULL DEFAULT 32000,
             enabled INTEGER NOT NULL DEFAULT 1,
             cooldown_until TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -123,6 +124,28 @@ pub async fn init_db(database_url: &str) -> anyhow::Result<SqlitePool> {
 
     // Seed iniziale se il DB è vuoto
     seed_default_providers(&pool).await?;
+
+    // REVIEW 31/08: migration idempotente colonna max_ctx (DB creati prima del campo)
+    let has_max_ctx: Option<(i64,)> = sqlx::query_as(
+        "SELECT COUNT(*) FROM pragma_table_info('providers') WHERE name = 'max_ctx'"
+    )
+    .fetch_one(&pool)
+    .await
+    .ok();
+    if has_max_ctx.map(|r| r.0 == 0).unwrap_or(true) {
+        let _ = sqlx::query("ALTER TABLE providers ADD COLUMN max_ctx INTEGER NOT NULL DEFAULT 32000")
+            .execute(&pool)
+            .await;
+    }
+    // Valorizza max_ctx per provider già in DB (i locali a ctx ridotto non
+    // devono mai ricevere prompt grandi — vedi REVIEW 31/08).
+    let _ = sqlx::query("UPDATE providers SET max_ctx = 4096 WHERE tier = 'local' AND max_ctx > 4096")
+        .execute(&pool)
+        .await;
+    let _ = sqlx::query("UPDATE providers SET max_ctx = 262144 WHERE tier != 'local' AND max_ctx < 262144")
+        .execute(&pool)
+        .await;
+
     set_secure_database_permissions(clean_path);
 
     Ok(pool)
@@ -153,6 +176,7 @@ async fn seed_default_providers(pool: &SqlitePool) -> anyhow::Result<()> {
             tags: vec!["chitchat".into(), "fast".into(), "local".into()],
             tpm_limit: 100000,
             rpm_limit: 60,
+            max_ctx: 4096,
             enabled: true,
         },
         // 2. OpenRouter Free Pool
@@ -167,6 +191,7 @@ async fn seed_default_providers(pool: &SqlitePool) -> anyhow::Result<()> {
             tags: vec!["coding".into(), "reasoning".into(), "cloud_free".into(), "tool_supported".into()],
             tpm_limit: 50000,
             rpm_limit: 30,
+            max_ctx: 262144,
             enabled: true,
         },
         // 3. Google Gemini Free Tier
@@ -181,6 +206,7 @@ async fn seed_default_providers(pool: &SqlitePool) -> anyhow::Result<()> {
             tags: vec!["chitchat".into(), "coding".into(), "fast".into(), "cloud_free".into(), "tool_supported".into()],
             tpm_limit: 32000,
             rpm_limit: 15,
+            max_ctx: 262144,
             enabled: true,
         },
     ];
@@ -220,8 +246,8 @@ pub async fn insert_provider_db(pool: &SqlitePool, p: &ProviderInput) -> anyhow:
 
     let tags_json = serde_json::to_string(&p.tags).unwrap_or_else(|_| "[]".to_string());
     let res = sqlx::query(
-        "INSERT OR REPLACE INTO providers (name, base_url, api_key, auth_type, model, priority, tier, tags, tpm_limit, rpm_limit, enabled)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT OR REPLACE INTO providers (name, base_url, api_key, auth_type, model, priority, tier, tags, tpm_limit, rpm_limit, max_ctx, enabled)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&p.name)
     .bind(&p.base_url)
@@ -233,6 +259,7 @@ pub async fn insert_provider_db(pool: &SqlitePool, p: &ProviderInput) -> anyhow:
     .bind(tags_json)
     .bind(p.tpm_limit as i64)
     .bind(p.rpm_limit as i64)
+    .bind(p.max_ctx as i64)
     .bind(p.enabled as i64)
     .execute(pool)
     .await?;
@@ -242,7 +269,7 @@ pub async fn insert_provider_db(pool: &SqlitePool, p: &ProviderInput) -> anyhow:
 
 pub async fn load_all_providers(pool: &SqlitePool) -> Vec<Provider> {
     let rows = sqlx::query(
-        "SELECT id, name, base_url, api_key, auth_type, model, priority, tier, tags, tpm_limit, rpm_limit, enabled, cooldown_until FROM providers ORDER BY priority ASC"
+        "SELECT id, name, base_url, api_key, auth_type, model, priority, tier, tags, tpm_limit, rpm_limit, max_ctx, enabled, cooldown_until FROM providers ORDER BY priority ASC"
     )
     .fetch_all(pool)
     .await
@@ -255,6 +282,7 @@ pub async fn load_all_providers(pool: &SqlitePool) -> Vec<Provider> {
         let priority_val: i64 = r.get("priority");
         let tpm_val: i64 = r.get("tpm_limit");
         let rpm_val: i64 = r.get("rpm_limit");
+        let max_ctx_val: i64 = r.get("max_ctx");
         let enabled_val: i64 = r.get("enabled");
 
         Provider {
@@ -269,6 +297,7 @@ pub async fn load_all_providers(pool: &SqlitePool) -> Vec<Provider> {
             tags,
             tpm_limit: tpm_val as u32,
             rpm_limit: rpm_val as u32,
+            max_ctx: max_ctx_val as u32,
             enabled: enabled_val != 0,
             cooldown_until: r.get("cooldown_until"),
         }
@@ -282,9 +311,26 @@ pub async fn insert_usage_log(
     model_id: &str,
     prompt_tokens: u32,
     completion_tokens: u32,
-    cost_estimated_usd: f64,
+    _cost_estimated_usd: f64,
     intent_tag: &str,
 ) -> anyhow::Result<()> {
+    // REVIEW 31/08: il costo reale viene dal catalogo (models_catalog), non dal
+    // chiamante. I provider free costano 0; i costosi (es. openrouter) hanno
+    // i prezzi per 1M token sincronizzati da OpenRouter/Google.
+    let (prompt_cost_1m, completion_cost_1m): (f64, f64) = sqlx::query_as(
+        "SELECT prompt_cost_per_1m, completion_cost_per_1m FROM models_catalog
+         WHERE model_id = ? ORDER BY provider_name = ? DESC LIMIT 1"
+    )
+    .bind(model_id)
+    .bind(provider_name)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None)
+    .unwrap_or((0.0, 0.0));
+
+    let cost = (prompt_tokens as f64 / 1_000_000.0) * prompt_cost_1m
+        + (completion_tokens as f64 / 1_000_000.0) * completion_cost_1m;
+
     sqlx::query(
         "INSERT INTO usage_log (provider_name, model_id, prompt_tokens, completion_tokens, cost_estimated_usd, intent_tag)
          VALUES (?, ?, ?, ?, ?, ?)"
@@ -293,7 +339,7 @@ pub async fn insert_usage_log(
     .bind(model_id)
     .bind(prompt_tokens as i64)
     .bind(completion_tokens as i64)
-    .bind(cost_estimated_usd)
+    .bind(cost)
     .bind(intent_tag)
     .execute(pool)
     .await?;
