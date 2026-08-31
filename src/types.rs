@@ -13,6 +13,7 @@ pub struct Provider {
     pub tags: Vec<String>, // chitchat, coding, reasoning, vision, tool_supported
     pub tpm_limit: u32, // Token al minuto max
     pub rpm_limit: u32, // Richieste al minuto max
+    pub max_ctx: u32,   // Token di contesto massimi gestibili dal provider
     pub enabled: bool,
     pub cooldown_until: Option<String>,
 }
@@ -35,6 +36,8 @@ pub struct ProviderInput {
     pub tpm_limit: u32,
     #[serde(default = "default_rpm")]
     pub rpm_limit: u32,
+    #[serde(default = "default_max_ctx")]
+    pub max_ctx: u32,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 }
@@ -44,6 +47,7 @@ fn default_priority() -> u32 { 100 }
 fn default_tier() -> String { "free".to_string() }
 fn default_tpm() -> u32 { 32000 }
 fn default_rpm() -> u32 { 15 }
+fn default_max_ctx() -> u32 { 32000 }
 fn default_enabled() -> bool { true }
 
 #[derive(Debug, Clone, Deserialize)]

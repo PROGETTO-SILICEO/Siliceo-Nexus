@@ -18,6 +18,7 @@ mod router;
 mod adapters;
 mod dashboard;
 mod catalog;
+mod pii;
 mod metrics;
 mod streaming;
 
@@ -125,6 +126,7 @@ async fn main() -> anyhow::Result<()> {
         // Health & Live Telemetry
         .route("/health", get(handle_health))
         .route("/stats", get(handle_stats))
+        .route("/usage", get(handle_usage))
         // Health check dell'SDK Anthropic: Claude Code chiama HEAD/GET {base}/api/hello
         // all'avvio. Se risponde 404, il client fallisce con "errore API".
         .route("/api/hello", get(handle_api_hello).head(handle_api_hello))
@@ -236,6 +238,7 @@ pub async fn apply_provider_cooldown(state: &AppState, provider: &Provider, stat
         Some(401) | Some(403) => 300,
         Some(429) => 120,
         Some(code) if code >= 500 && code < 600 => 60,
+        None => 60, // errore di rete/timeout: non riprovare subito (REVIEW 31/08)
         _ => 15,
     };
 
@@ -339,6 +342,43 @@ async fn handle_health(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
+/// Telemetria di utilizzo reale: aggregazioni da usage_log con costi dal catalogo.
+async fn handle_usage(State(state): State<AppState>) -> impl IntoResponse {
+    let total: Option<(i64, f64)> = sqlx::query_as(
+        "SELECT COUNT(*), COALESCE(SUM(cost_estimated_usd), 0.0) FROM usage_log"
+    )
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
+
+    let by_provider: Vec<(String, i64, f64)> = sqlx::query_as(
+        "SELECT provider_name, COUNT(*), COALESCE(SUM(cost_estimated_usd), 0.0)
+         FROM usage_log GROUP BY provider_name ORDER BY 2 DESC"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let last = sqlx::query_as::<_, (i64, String, String, i64, i64, f64, String)>(
+        "SELECT id, provider_name, model_id, prompt_tokens, completion_tokens, cost_estimated_usd, intent_tag
+         FROM usage_log ORDER BY id DESC LIMIT 20"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(serde_json::json!({
+        "total_calls": total.map(|t| t.0).unwrap_or(0),
+        "total_cost_usd": total.map(|t| t.1).unwrap_or(0.0),
+        "by_provider": by_provider.iter().map(|(p, c, cost)| {
+            serde_json::json!({"provider": p, "calls": c, "cost_usd": cost})
+        }).collect::<Vec<_>>(),
+        "last": last.iter().map(|(id, p, m, pt, ct, cost, intent)| {
+            serde_json::json!({"id": id, "provider": p, "model": m, "prompt_tokens": pt, "completion_tokens": ct, "cost_usd": cost, "intent": intent})
+        }).collect::<Vec<_>>()
+    }))
+}
+
 /// Health check dell'SDK Anthropic. Claude Code lo chiama all'avvio (HEAD/GET).
 /// Deve rispondere 200, altrimenti il client riporta un errore API.
 async fn handle_api_hello() -> impl IntoResponse {
@@ -382,6 +422,14 @@ async fn handle_chat_completions(
     enforce_inference_rate_limit(&state).await?;
     info!("📥 Incoming chat completions request (messages: {})", request.messages.len());
 
+    // REVIEW 31/08: context management anche sul path OpenAI (prima era solo
+    // su Anthropic): senza trim, un prompt lungo esplode i provider a ctx basso
+    // (beellama 4096, groq TPM 8000) facendo bruciare la cascata in fallimenti.
+    let request = LLMRequest {
+        messages: trim_context(request.messages.clone(), 24_000),
+        ..request
+    };
+
     // 1. Classificazione dell'intento in < 1ms
     let intent = router::classify_intent(&request);
     let requires_tools = request.tools.is_some();
@@ -393,7 +441,8 @@ async fn handle_chat_completions(
     }
 
     // 2. Ottieni tutti i provider idonei ordinati per priorità per la cascata di failover
-    let eligible = router::select_eligible_providers(&state.providers, Some(&state.cooldowns), intent, requires_tools).await;
+    let est_tokens: usize = request.messages.iter().map(|m| m.content.chars().count() / 4).sum();
+    let eligible = router::select_eligible_providers(&state.providers, Some(&state.cooldowns), intent, requires_tools, est_tokens).await;
     if eligible.is_empty() {
         state.metrics.lock().await.record_endpoint_error("chat");
         return Err((StatusCode::SERVICE_UNAVAILABLE, "Nessun provider LLM disponibile".to_string()));
@@ -401,12 +450,50 @@ async fn handle_chat_completions(
 
     let mut last_error = String::new();
 
+    // --- Rizzo PII: filtro reversibile prima del forward ---
+    let pii_enabled = std::env::var("RIZZO_PII")
+        .map(|v| v == "1" || v.to_lowercase() == "true" || v.to_lowercase() == "on")
+        .unwrap_or(false);
+    let exclude_local = std::env::var("RIZZO_EXCLUDE_LOCAL")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(true);
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let mut anonymized_request = request.clone();
+    let mut pii_count = 0;
+    if pii_enabled {
+        pii_count = pii::anonymize_messages(&mut anonymized_request.messages, &request_id);
+        if pii_count > 0 {
+            info!("🔒 Rizzo PII: anonimizzate {} entità (req {}), exclude_local={}", pii_count, &request_id[..8], exclude_local);
+        }
+    }
+
     // 3. Cascata di Failover Sequenziale
     for p in &eligible {
+        // Se è un provider locale (2070) ed è attivo l'exclude, manda l'originale
+        let is_local = p.base_url.contains("100.98.20.76") || p.base_url.contains("100.98.20.76:8080") || p.tier == "local";
+        let use_request = if pii_enabled && pii_count > 0 && !(exclude_local && is_local) {
+            &anonymized_request
+        } else {
+            if pii_enabled && is_local && pii_count > 0 {
+                info!("🔓 Rizzo PII: skip per provider locale '{}'", p.name);
+            }
+            &request
+        };
         info!("🚀 Tentativo con provider '{}' (model: {})", p.name, p.model);
         let attempt_start = std::time::Instant::now();
-        match adapters::dispatch_request(&state.client, p, &request).await {
-            Ok(response) => {
+        match adapters::dispatch_request(&state.client, p, use_request).await {
+            Ok(mut response) => {
+                // De-anonimizzazione reversibile: se il modello riecheggia un placeholder, lo ripristiniamo
+                if pii_enabled && pii_count > 0 && !(exclude_local && is_local) {
+                    for choice in &mut response.choices {
+                        let orig = choice.message.content.clone();
+                        let dean = pii::deanonymize(&orig, &request_id);
+                        if dean != orig {
+                            info!("🔓 Rizzo PII: de-anonimizzata risposta (req {})", &request_id[..8]);
+                            choice.message.content = dean;
+                        }
+                    }
+                }
                 let latency_ms = attempt_start.elapsed().as_millis() as u64;
                 {
                     let mut m = state.metrics.lock().await;
@@ -713,7 +800,7 @@ async fn handle_anthropic_messages(
     // (preservando system) per non esplodere il contesto dei provider.
     let llm_messages = trim_context(llm_messages, 24_000);
 
-    let llm_req = LLMRequest {
+    let mut llm_req = LLMRequest {
         messages: llm_messages,
         model: anthropic_req.model.clone(),
         max_tokens: anthropic_req.max_tokens,
@@ -722,6 +809,23 @@ async fn handle_anthropic_messages(
         tools: anthropic_req.tools.clone(),
         stop: anthropic_req.stop_sequences.clone(),
     };
+
+    // --- Rizzo PII per Anthropic ---
+    let pii_enabled_anth = std::env::var("RIZZO_PII")
+        .map(|v| v == "1" || v.to_lowercase() == "true" || v.to_lowercase() == "on")
+        .unwrap_or(false);
+    let exclude_local_anth = std::env::var("RIZZO_EXCLUDE_LOCAL")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(true);
+    let request_id_anth = uuid::Uuid::new_v4().to_string();
+    let mut pii_count_anth = 0;
+    let mut llm_req_anonymized = llm_req.clone();
+    if pii_enabled_anth {
+        pii_count_anth = pii::anonymize_messages(&mut llm_req_anonymized.messages, &request_id_anth);
+        if pii_count_anth > 0 {
+            info!("🔒 Rizzo PII (anthropic): anonimizzate {} entità (req {})", pii_count_anth, &request_id_anth[..8]);
+        }
+    }
 
     let intent = router::classify_intent(&llm_req);
     let intent_str = intent.as_str().to_string();
@@ -733,7 +837,8 @@ async fn handle_anthropic_messages(
     let has_tools = llm_req.tools.as_ref().map_or(false, |t| t.as_array().map_or(false, |a| !a.is_empty()));
     let has_tool_result = llm_req.messages.iter().any(|m| m.role == "tool");
     info!("🔧 [anthropic] has_tools={} has_tool_result={} roles={:?}", has_tools, has_tool_result, llm_req.messages.iter().map(|m| m.role.as_str()).collect::<Vec<_>>());
-    let eligible = router::select_eligible_providers(&state.providers, Some(&state.cooldowns), intent, has_tools || has_tool_result).await;
+    let est_tokens: usize = llm_req.messages.iter().map(|m| m.content.chars().count() / 4).sum();
+    let eligible = router::select_eligible_providers(&state.providers, Some(&state.cooldowns), intent, has_tools || has_tool_result, est_tokens).await;
 
     if eligible.is_empty() {
         state.metrics.lock().await.record_endpoint_error("anthropic");
@@ -743,15 +848,47 @@ async fn handle_anthropic_messages(
     // STREAMING: se il client chiede stream, rispondi in SSE (Anthropic format)
     info!("🔧 [anthropic] stream richiesto: {:?}", llm_req.stream);
     if llm_req.stream == Some(true) {
-        return handle_anthropic_stream(&state, &eligible, &llm_req, &intent_str).await;
+        // Per streaming, usa la versione anonimizzata se c'è PII (il deanonymize dei chunk avviene nel stream se non è locale)
+        let use_stream_req = if pii_enabled_anth && pii_count_anth > 0 {
+            // Se tutti i provider eligible sono locali e exclude_local, manda originale
+            let all_local = eligible.iter().all(|p| p.base_url.contains("100.98.20.76") || p.tier == "local");
+            if exclude_local_anth && all_local {
+                &llm_req
+            } else {
+                &llm_req_anonymized
+            }
+        } else {
+            &llm_req
+        };
+        return handle_anthropic_stream(&state, &eligible, use_stream_req, &intent_str).await;
     }
 
     let mut last_err = String::new();
     for p in &eligible {
+        let is_local_anth = p.base_url.contains("100.98.20.76") || p.tier == "local";
+        let use_req_anth = if pii_enabled_anth && pii_count_anth > 0 && !(exclude_local_anth && is_local_anth) {
+            &llm_req_anonymized
+        } else {
+            if pii_enabled_anth && is_local_anth && pii_count_anth > 0 {
+                info!("🔓 Rizzo PII (anthropic): skip per provider locale '{}'", p.name);
+            }
+            &llm_req
+        };
         info!("🚀 [anthropic] Tentativo con provider '{}' (model: {})", p.name, p.model);
         let attempt_start = std::time::Instant::now();
-        match adapters::dispatch_request(&state.client, p, &llm_req).await {
-            Ok(res) => {
+        match adapters::dispatch_request(&state.client, p, use_req_anth).await {
+            Ok(mut res) => {
+                // De-anonimizza se necessario
+                if pii_enabled_anth && pii_count_anth > 0 && !(exclude_local_anth && is_local_anth) {
+                    for choice in &mut res.choices {
+                        let orig = choice.message.content.clone();
+                        let dean = pii::deanonymize(&orig, &request_id_anth);
+                        if dean != orig {
+                            info!("🔓 Rizzo PII (anthropic): de-anonimizzata risposta (req {})", &request_id_anth[..8]);
+                            choice.message.content = dean;
+                        }
+                    }
+                }
                 let latency_ms = attempt_start.elapsed().as_millis() as u64;
                 {
                     let mut m = state.metrics.lock().await;

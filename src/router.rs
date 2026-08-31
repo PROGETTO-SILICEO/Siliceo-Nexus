@@ -74,12 +74,13 @@ pub async fn select_eligible_providers(
     mem_cooldowns: Option<&Arc<RwLock<std::collections::HashMap<String, chrono::DateTime<chrono::Utc>>>>>,
     intent: IntentTag,
     requires_tools: bool,
+    est_tokens: usize,
 ) -> Vec<Provider> {
     let list = providers.read().await;
     let required_tag = intent.as_str();
     let now = chrono::Utc::now();
 
-    info!("🎯 Intent classificato: '{}' (requires_tools: {})", required_tag, requires_tools);
+    info!("🎯 Intent classificato: '{}' (requires_tools: {}, est_tokens: {})", required_tag, requires_tools, est_tokens);
 
     let mem_map: std::collections::HashMap<String, chrono::DateTime<chrono::Utc>> = match mem_cooldowns {
         Some(m) => m.read().await.clone(),
@@ -105,6 +106,8 @@ pub async fn select_eligible_providers(
         if !p.enabled { continue; }
         if in_cooldown(p) { continue; }
         if requires_tools && !p.tags.contains(&"tool_supported".to_string()) { continue; }
+        // REVIEW 31/08: escludi i provider che non possono contenere il prompt
+        if est_tokens > 0 && (p.max_ctx as usize) < est_tokens { continue; }
 
         if p.tags.contains(&required_tag.to_string()) || p.tags.contains(&"general".to_string()) {
             eligible.push(p.clone());
@@ -117,6 +120,7 @@ pub async fn select_eligible_providers(
         if eligible.iter().any(|e| e.name == p.name) { continue; }
         if in_cooldown(p) { continue; }
         if requires_tools && !p.tags.contains(&"tool_supported".to_string()) { continue; }
+        if est_tokens > 0 && (p.max_ctx as usize) < est_tokens { continue; }
         eligible.push(p.clone());
     }
 
@@ -130,7 +134,7 @@ pub async fn select_provider(
     intent: IntentTag,
     requires_tools: bool,
 ) -> Result<Provider, String> {
-    let eligible = select_eligible_providers(providers, mem_cooldowns, intent, requires_tools).await;
+    let eligible = select_eligible_providers(providers, mem_cooldowns, intent, requires_tools, 0).await;
     if let Some(first) = eligible.first() {
         info!("✅ Selezionato provider primario '{}' (model: {})", first.name, first.model);
         Ok(first.clone())

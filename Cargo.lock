@@ -1762,6 +1762,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "futures-util",
+ "once_cell",
  "regex",
  "reqwest",
  "serde",
