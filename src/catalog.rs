@@ -1,4 +1,4 @@
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 use sqlx::SqlitePool;
 use serde::Deserialize;
 
@@ -181,4 +181,115 @@ pub fn spawn_catalog_sync_loop(client: reqwest::Client, pool: SqlitePool) {
             tokio::time::sleep(std::time::Duration::from_secs(86400)).await;
         }
     });
+}
+
+use crate::types::FreeProviderCatalogEntry;
+
+/// Carica il catalogo dei 100 provider gratuiti dal file JSON statico
+pub fn load_free_providers_catalog() -> Vec<FreeProviderCatalogEntry> {
+    let path = "data/free_providers_catalog.json";
+    if let Ok(content) = std::fs::read_to_string(path) {
+        if let Ok(catalog) = serde_json::from_str::<Vec<FreeProviderCatalogEntry>>(&content) {
+            return catalog;
+        }
+    }
+    Vec::new()
+}
+
+/// Sincronizza i provider gratuiti federati nel database:
+/// 1. I provider `no_auth` (es. OpenCode, DuckDuckGo, AI Horde) vengono attivati automaticamente.
+/// 2. I provider con chiave API configurata nelle variabili d'ambiente (es. GROQ_API_KEY, SAMBANOVA_API_KEY, etc.) vengono attivati.
+pub async fn sync_federated_free_providers(pool: &SqlitePool) -> anyhow::Result<(usize, usize)> {
+    let catalog = load_free_providers_catalog();
+    if catalog.is_empty() {
+        return Ok((0, 0));
+    }
+
+    let mut auto_noauth_count = 0;
+    let mut auto_keyed_count = 0;
+
+    for entry in catalog {
+        let existing: Option<(i64, Option<String>, i64)> = sqlx::query_as(
+            "SELECT id, api_key, enabled FROM providers WHERE name = ?"
+        )
+        .bind(&entry.id)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or(None);
+
+        if entry.no_auth {
+            // Provider a zero configurazione
+            if existing.is_none() {
+                let tags_json = serde_json::to_string(&entry.tags).unwrap_or_else(|_| "[]".to_string());
+                let res = sqlx::query(
+                    "INSERT INTO providers (name, base_url, api_key, auth_type, model, priority, tier, tags, tpm_limit, rpm_limit, max_ctx, enabled)
+                     VALUES (?, ?, NULL, ?, ?, 2, 'free', ?, ?, ?, ?, 1)"
+                )
+                .bind(&entry.id)
+                .bind(&entry.base_url)
+                .bind(&entry.auth_type)
+                .bind(&entry.default_model)
+                .bind(&tags_json)
+                .bind(entry.tpm_limit as i64)
+                .bind(entry.rpm_limit as i64)
+                .bind(entry.max_ctx as i64)
+                .execute(pool)
+                .await;
+
+                if res.is_ok() {
+                    auto_noauth_count += 1;
+                }
+            }
+        } else if let Some(ref env_name) = entry.env_var {
+            // Provider che richiede chiave API: verifica se la chiave è presente nell'ambiente
+            if let Ok(key) = std::env::var(env_name) {
+                let key_trimmed = key.trim();
+                if !key_trimmed.is_empty() {
+                    let tags_json = serde_json::to_string(&entry.tags).unwrap_or_else(|_| "[]".to_string());
+                    match existing {
+                        Some((id, _, enabled)) => {
+                            // Aggiorna chiave e riabilita se era spento
+                            let _ = sqlx::query(
+                                "UPDATE providers SET api_key = ?, enabled = 1, updated_at = datetime('now') WHERE id = ?"
+                            )
+                            .bind(key_trimmed)
+                            .bind(id)
+                            .execute(pool)
+                            .await;
+                            if enabled == 0 {
+                                auto_keyed_count += 1;
+                            }
+                        }
+                        None => {
+                            let res = sqlx::query(
+                                "INSERT INTO providers (name, base_url, api_key, auth_type, model, priority, tier, tags, tpm_limit, rpm_limit, max_ctx, enabled)
+                                 VALUES (?, ?, ?, ?, ?, 3, 'free', ?, ?, ?, ?, 1)"
+                            )
+                            .bind(&entry.id)
+                            .bind(&entry.base_url)
+                            .bind(key_trimmed)
+                            .bind(&entry.auth_type)
+                            .bind(&entry.default_model)
+                            .bind(&tags_json)
+                            .bind(entry.tpm_limit as i64)
+                            .bind(entry.rpm_limit as i64)
+                            .bind(entry.max_ctx as i64)
+                            .execute(pool)
+                            .await;
+
+                            if res.is_ok() {
+                                auto_keyed_count += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if auto_noauth_count > 0 || auto_keyed_count > 0 {
+        info!("🌐 Federazione Free-Tier Siliceo: attivati {} no-auth e {} con chiave da ambiente", auto_noauth_count, auto_keyed_count);
+    }
+
+    Ok((auto_noauth_count, auto_keyed_count))
 }

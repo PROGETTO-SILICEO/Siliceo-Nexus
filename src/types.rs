@@ -124,3 +124,39 @@ pub struct CatalogItem {
     pub capabilities: Vec<String>,
     pub last_updated: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FreeProviderCatalogEntry {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    #[serde(default = "default_format")]
+    pub format: String,
+    #[serde(default = "default_auth_type")]
+    pub auth_type: String,
+    pub env_var: Option<String>,
+    #[serde(default)]
+    pub no_auth: bool,
+    pub default_model: String,
+    #[serde(default)]
+    pub models: Vec<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default = "default_max_ctx_catalog")]
+    pub max_ctx: u32,
+    #[serde(default = "default_rpm_catalog")]
+    pub rpm_limit: u32,
+    #[serde(default = "default_tpm_catalog")]
+    pub tpm_limit: u32,
+    #[serde(default)]
+    pub signup_url: Option<String>,
+    #[serde(default)]
+    pub free_tier_info: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+}
+
+fn default_format() -> String { "openai".to_string() }
+fn default_max_ctx_catalog() -> u32 { 131072 }
+fn default_rpm_catalog() -> u32 { 30 }
+fn default_tpm_catalog() -> u32 { 60000 }

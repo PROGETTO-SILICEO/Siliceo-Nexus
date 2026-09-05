@@ -1,0 +1,2550 @@
+[
+  {
+    "id": "aihorde",
+    "name": "AI Horde",
+    "base_url": "https://aihorde.net/api",
+    "format": "aihorde",
+    "auth_type": "none",
+    "env_var": null,
+    "no_auth": true,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://aihorde.net",
+    "free_tier_info": "Tier gratuito per sviluppatori su AI Horde. Registrati su aihorde.net per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "together",
+    "name": "Together AI",
+    "base_url": "https://api.together.xyz/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "TOGETHER_API_KEY",
+    "no_auth": false,
+    "default_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "models": [
+      "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "deepseek-ai/DeepSeek-R1",
+      "Qwen/Qwen2.5-Coder-32B-Instruct"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.together.ai/settings/api-keys",
+    "free_tier_info": "Credito di benvenuto di $5 per tutti i modelli open source senza carta richiesta.",
+    "category": "\ud83e\udd1d Open Source Cloud"
+  },
+  {
+    "id": "github_models",
+    "name": "GitHub Models Free Tier",
+    "base_url": "https://models.inference.ai.azure.com",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "GITHUB_TOKEN",
+    "no_auth": false,
+    "default_model": "gpt-4o-mini",
+    "models": [
+      "gpt-4o-mini",
+      "Meta-Llama-3.3-70B-Instruct",
+      "Mistral-large-2411",
+      "Phi-4"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://github.com/marketplace/models",
+    "free_tier_info": "Accesso gratuito con rate limit giornaliero a GPT-4o-mini, Llama 3.3 e Phi-4 usando il tuo Personal Access Token di GitHub.",
+    "category": "\ud83d\udc19 GitHub / Microsoft Azure"
+  },
+  {
+    "id": "opencode",
+    "name": "OpenCode Free",
+    "base_url": "https://opencode.ai/zen/v1",
+    "format": "openai",
+    "auth_type": "none",
+    "env_var": null,
+    "no_auth": true,
+    "default_model": "mimo-v2.5-free",
+    "models": [
+      "big-pickle",
+      "muse-spark-1.2",
+      "muse-spark-1.2-contributor-free",
+      "deepseek-v4-flash-free",
+      "mimo-v2.5-free",
+      "hy3-free",
+      "nemotron-3-ultra-free",
+      "north-mini-code-free"
+    ],
+    "tags": [
+      "chitchat",
+      "coding",
+      "cloud_free",
+      "tool_supported"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://opencode.ai/zen",
+    "free_tier_info": "Zero-Auth nativo: endpoint pubblico libero per modelli Mimo v2.5 e coding assistance.",
+    "category": "\ud83c\udd93 Zero-Auth Free"
+  },
+  {
+    "id": "uncloseai",
+    "name": "UncloseAI",
+    "base_url": "https://hermes.ai.unturf.com/v1",
+    "format": "openai",
+    "auth_type": "none",
+    "env_var": null,
+    "no_auth": true,
+    "default_model": "adamo1139/Hermes-3-Llama-3.1-8B-FP8-Dynamic",
+    "models": [
+      "adamo1139/Hermes-3-Llama-3.1-8B-FP8-Dynamic",
+      "qwen3.6:27b",
+      "gemma4:31b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://hermes.ai.unturf.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su UncloseAI. Registrati su hermes.ai.unturf.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "cloudflare",
+    "name": "Cloudflare Workers AI",
+    "base_url": "https://api.cloudflare.com/client/v4/accounts",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "CLOUDFLARE_API_TOKEN",
+    "no_auth": false,
+    "default_model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "models": [],
+    "tags": [
+      "chitchat",
+      "coding",
+      "cloud_free",
+      "tool_supported"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://dash.cloudflare.com/",
+    "free_tier_info": "10.000 neuroni gratuiti al giorno (~100k token) per sempre con account Cloudflare gratuito.",
+    "category": "\u2601\ufe0f Edge Compute"
+  },
+  {
+    "id": "agentrouter",
+    "name": "AgentRouter",
+    "base_url": "https://agentrouter.org/v1/messages",
+    "format": "claude",
+    "auth_type": "bearer",
+    "env_var": "AGENTROUTER_API_KEY",
+    "no_auth": false,
+    "default_model": "claude-opus-4-8",
+    "models": [
+      "claude-opus-4-8",
+      "claude-opus-5",
+      "gpt-5.6-sol"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://agentrouter.org",
+    "free_tier_info": "Tier gratuito per sviluppatori su AgentRouter. Registrati su agentrouter.org per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "agnes",
+    "name": "Agnes AI",
+    "base_url": "https://apihub.agnes-ai.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "AGNES_API_KEY",
+    "no_auth": false,
+    "default_model": "agnes-2.5-flash",
+    "models": [
+      "agnes-1.5-flash",
+      "agnes-2.0-flash",
+      "agnes-2.5-flash"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://agnes-ai.com/",
+    "free_tier_info": "Cloud inference gateway Singapore per modelli multimodali leggeri della famiglia Agnes AI.",
+    "category": "\ud83d\udc09 Asian Frontier AI"
+  },
+  {
+    "id": "ai21",
+    "name": "AI21 Labs",
+    "base_url": "https://api.ai21.com/studio/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "AI21_API_KEY",
+    "no_auth": false,
+    "default_model": "jamba-1.5-mini",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://studio.ai21.com/account/api-key",
+    "free_tier_info": "Tier gratuito iniziale con $10 di crediti per i modelli Jamba 1.5 Mini e Large (architettura ibrida SSM-Transformer).",
+    "category": "\ud83e\udde0 Enterprise Frontier Labs"
+  },
+  {
+    "id": "ainative",
+    "name": "AINative Studio",
+    "base_url": "https://api.ainative.studio/api/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "AINATIVE_API_KEY",
+    "no_auth": false,
+    "default_model": "qwen3-235b-cerebras",
+    "models": [
+      "qwen3-235b-cerebras",
+      "qwen3-32b",
+      "qwen3-14b",
+      "qwen3-8b",
+      "llama-4-maverick",
+      "llama3.1-8b-cerebras",
+      "deepseek-r1",
+      "nous-coder",
+      "gemini-flash"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.ainative.studio",
+    "free_tier_info": "Tier gratuito per sviluppatori su AINative Studio. Registrati su api.ainative.studio per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "aion",
+    "name": "Aion Labs",
+    "base_url": "https://api.aionlabs.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "AION_API_KEY",
+    "no_auth": false,
+    "default_model": "aion-labs/aion-3.0",
+    "models": [
+      "aion-labs/aion-3.0",
+      "aion-labs/aion-3.0-mini",
+      "aion-labs/aion-2.5",
+      "aion-labs/aion-2.0",
+      "aion-labs/aion-rp-llama-3.1-8b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.aionlabs.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Aion Labs. Registrati su api.aionlabs.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "anyapi",
+    "name": "AnyAPI AI",
+    "base_url": "https://api.anyapi.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "ANYAPI_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.anyapi.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su AnyAPI AI. Registrati su api.anyapi.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "auriko",
+    "name": "Auriko",
+    "base_url": "https://api.auriko.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "AURIKO_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.auriko.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Auriko. Registrati su api.auriko.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "baichuan",
+    "name": "Baichuan",
+    "base_url": "https://api.baichuan-ai.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "BAICHUAN_API_KEY",
+    "no_auth": false,
+    "default_model": "Baichuan4-Turbo",
+    "models": [
+      "Baichuan4-Turbo",
+      "Baichuan4-Air",
+      "Baichuan4",
+      "Baichuan3-Turbo",
+      "Baichuan3-Turbo-128k"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.baichuan-ai.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Baichuan. Registrati su api.baichuan-ai.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "baidu",
+    "name": "Baidu (ERNIE)",
+    "base_url": "https://qianfan.baidubce.com/v2",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "BAIDU_API_KEY",
+    "no_auth": false,
+    "default_model": "ernie-5.1",
+    "models": [
+      "ernie-5.1",
+      "ernie-5.0",
+      "ernie-x1.1",
+      "ernie-4.5-turbo-128k",
+      "ernie-4.5-turbo-32k",
+      "ernie-4.5-turbo-vl",
+      "ernie-4.5-21b-a3b",
+      "ernie-4.5-0.3b",
+      "ernie-4.0-8k",
+      "ernie-4.0-turbo-128k"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://qianfan.baidubce.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Baidu (ERNIE). Registrati su qianfan.baidubce.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "baseten",
+    "name": "Baseten",
+    "base_url": "https://inference.baseten.co/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "BASETEN_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://inference.baseten.co",
+    "free_tier_info": "Tier gratuito per sviluppatori su Baseten. Registrati su inference.baseten.co per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "bazaarlink",
+    "name": "BazaarLink",
+    "base_url": "https://bazaarlink.ai/api/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "BAZAARLINK_API_KEY",
+    "no_auth": false,
+    "default_model": "auto:free",
+    "models": [
+      "auto:free",
+      "claude-opus-4.7",
+      "claude-sonnet-4.6",
+      "claude-haiku-4.5",
+      "gpt-5.5",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.4-nano",
+      "grok-4.3",
+      "grok-4.20"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://bazaarlink.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su BazaarLink. Registrati su bazaarlink.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "blackbox",
+    "name": "Blackbox AI",
+    "base_url": "https://api.blackbox.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "BLACKBOX_API_KEY",
+    "no_auth": false,
+    "default_model": "claude-fable-5",
+    "models": [
+      "claude-fable-5",
+      "claude-opus-4.8",
+      "claude-sonnet-5",
+      "claude-sonnet-4.6",
+      "gpt-5.5",
+      "gpt-5.4-pro",
+      "gpt-5.4",
+      "gpt-5.3-codex",
+      "gpt-5.4-nano",
+      "deepseek-v4-flash"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.blackbox.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Blackbox AI. Registrati su api.blackbox.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "bluesminds",
+    "name": "BluesMinds",
+    "base_url": "https://api.bluesminds.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "BLUESMINDS_API_KEY",
+    "no_auth": false,
+    "default_model": "gpt-4o",
+    "models": [
+      "gpt-4o",
+      "gpt-4o-mini",
+      "gpt-4.1",
+      "gpt-4.1-mini",
+      "gpt-4.1-nano",
+      "claude-sonnet-4-5",
+      "claude-haiku-4-5",
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-exp",
+      "deepseek-reasoner"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.bluesminds.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su BluesMinds. Registrati su api.bluesminds.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "byteplus",
+    "name": "BytePlus ModelArk",
+    "base_url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "BYTEPLUS_API_KEY",
+    "no_auth": false,
+    "default_model": "seed-2.0",
+    "models": [
+      "seed-2.0",
+      "kimi-k2-thinking",
+      "glm-4.7",
+      "gpt-oss-120b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://ark.ap-southeast.bytepluses.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su BytePlus ModelArk. Registrati su ark.ap-southeast.bytepluses.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "bytez",
+    "name": "Bytez",
+    "base_url": "https://api.bytez.com/models/v2/openai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "BYTEZ_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.bytez.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Bytez. Registrati su api.bytez.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "cerebras",
+    "name": "Cerebras",
+    "base_url": "https://api.cerebras.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "CEREBRAS_API_KEY",
+    "no_auth": false,
+    "default_model": "gpt-oss-120b",
+    "models": [
+      "zai-glm-4.7",
+      "gemma-4-31b",
+      "gpt-oss-120b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat",
+      "fast"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://cloud.cerebras.ai/",
+    "free_tier_info": "Wafer-Scale Engine da oltre 2000 token/sec. Tier free iniziale con $5 di crediti all iscrizione per Llama 3.3 e gpt-oss.",
+    "category": "\u26a1 LPUs & Ultra-Fast Inference"
+  },
+  {
+    "id": "chatanywhere",
+    "name": "ChatAnywhere",
+    "base_url": "https://api.chatanywhere.org/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "CHATANYWHERE_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.chatanywhere.org",
+    "free_tier_info": "Tier gratuito per sviluppatori su ChatAnywhere. Registrati su api.chatanywhere.org per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "cohere",
+    "name": "Cohere",
+    "base_url": "https://api.cohere.com/v2",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "COHERE_API_KEY",
+    "no_auth": false,
+    "default_model": "command-r-plus-08-2024",
+    "models": [
+      "command-a-reasoning-08-2025",
+      "command-a-vision-07-2025",
+      "command-a-03-2025",
+      "command-r7b-12-2024",
+      "command-r-plus-08-2024",
+      "command-r-08-2024"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://dashboard.cohere.com/api-keys",
+    "free_tier_info": "Trial Key gratuita permanente con limite di 1000 chiamate/mese per Command R+ e modelli di embedding.",
+    "category": "\ud83e\udde0 Enterprise Frontier Labs"
+  },
+  {
+    "id": "coze",
+    "name": "Coze",
+    "base_url": "https://api.coze.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "COZE_API_KEY",
+    "no_auth": false,
+    "default_model": "claude-3-7-sonnet-20250514",
+    "models": [
+      "claude-3-7-sonnet-20250514"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.coze.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Coze. Registrati su api.coze.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "dahl",
+    "name": "Dahl",
+    "base_url": "https://inference.dahl.global/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "DAHL_API_KEY",
+    "no_auth": false,
+    "default_model": "MiniMaxAI/MiniMax-M2.7",
+    "models": [
+      "MiniMaxAI/MiniMax-M2.7",
+      "moonshotai/Kimi-K2.6"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://inference.dahl.global",
+    "free_tier_info": "Tier gratuito per sviluppatori su Dahl. Registrati su inference.dahl.global per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "deepinfra",
+    "name": "DeepInfra",
+    "base_url": "https://api.deepinfra.com/v1/openai",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "DEEPINFRA_API_KEY",
+    "no_auth": false,
+    "default_model": "meta-llama/Meta-Llama-3.3-70B-Instruct",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://deepinfra.com/dash/api_keys",
+    "free_tier_info": "$1.80 di crediti gratuiti all iscrizione con GitHub (fino a 10M di token su modelli compatti).",
+    "category": "\u26a1 Serverless Inference"
+  },
+  {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "base_url": "https://api.deepseek.com/v1",
+    "format": "openai-responses",
+    "auth_type": "bearer",
+    "env_var": "DEEPSEEK_API_KEY",
+    "no_auth": false,
+    "default_model": "deepseek-chat",
+    "models": [
+      "deepseek-v4-pro",
+      "deepseek-v4-flash"
+    ],
+    "tags": [
+      "reasoning",
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://platform.deepseek.com/api_keys",
+    "free_tier_info": "Frontier lab open weights: DeepSeek-V3 e DeepSeek-R1 con 5 milioni di token gratuiti di prova all attivazione dell account.",
+    "category": "\ud83e\udde0 Reasoning & Frontier Labs"
+  },
+  {
+    "id": "dgrid",
+    "name": "DGrid",
+    "base_url": "https://api.dgrid.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "DGRID_API_KEY",
+    "no_auth": false,
+    "default_model": "dgridai/free",
+    "models": [
+      "dgridai/free"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.dgrid.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su DGrid. Registrati su api.dgrid.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "dify",
+    "name": "Dify",
+    "base_url": "https://api.dify.ai",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "DIFY_API_KEY",
+    "no_auth": false,
+    "default_model": "auto",
+    "models": [
+      "auto"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.dify.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Dify. Registrati su api.dify.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "doubao",
+    "name": "Doubao",
+    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "DOUBAO_API_KEY",
+    "no_auth": false,
+    "default_model": "doubao-seed-2-0-pro-260215",
+    "models": [
+      "doubao-seed-2-0-pro-260215",
+      "doubao-seed-2-0-lite-260215",
+      "doubao-seed-2-0-mini-260215",
+      "doubao-seed-2-0-code-preview-260215",
+      "doubao-seed-1-8-251228",
+      "doubao-seed-1-6-251015",
+      "doubao-seed-1-6-flash-250828",
+      "doubao-1-5-pro-32k-250115",
+      "doubao-pro-32k"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://ark.cn-beijing.volces.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Doubao. Registrati su ark.cn-beijing.volces.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "dxnt",
+    "name": "DXNT / DX Token",
+    "base_url": "https://www.dxnt.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "DXNT_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://www.dxnt.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su DXNT / DX Token. Registrati su www.dxnt.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "electronhub",
+    "name": "Electron Hub",
+    "base_url": "https://api.electronhub.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "ELECTRONHUB_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.electronhub.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Electron Hub. Registrati su api.electronhub.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "fastrouter",
+    "name": "FastRouter",
+    "base_url": "https://api.fastrouter.ai/api/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "FASTROUTER_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat",
+      "fast"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.fastrouter.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su FastRouter. Registrati su api.fastrouter.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "fireworks",
+    "name": "Fireworks AI",
+    "base_url": "https://api.fireworks.ai/inference/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "FIREWORKS_API_KEY",
+    "no_auth": false,
+    "default_model": "accounts/fireworks/models/llama-v3p3-70b-instruct",
+    "models": [
+      "deepseek-v4-flash",
+      "deepseek-v4-pro",
+      "glm-5p1",
+      "gpt-oss-120b",
+      "gpt-oss-20b",
+      "kimi-k2p5",
+      "kimi-k2p6",
+      "minimax-m2p5",
+      "minimax-m2p7",
+      "qwen3p6-plus"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://fireworks.ai/api-keys",
+    "free_tier_info": "Inference serverless ultra-veloce con $1 di credito omaggio all iscrizione (equivalente a milioni di token). Login con Google/GitHub.",
+    "category": "\ud83d\udd25 Serverless Inference"
+  },
+  {
+    "id": "freebuff",
+    "name": "Freebuff",
+    "base_url": "https://www.codebuff.com/api/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "FREEBUFF_API_KEY",
+    "no_auth": false,
+    "default_model": "deepseek/deepseek-v4-flash",
+    "models": [
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-pro",
+      "openai/gpt-5.6-luna",
+      "minimax/minimax-m3",
+      "mimo/mimo-v2.5",
+      "z-ai/glm-5.2",
+      "crof/kimi-k3-eco",
+      "anthropic/claude-fable-5",
+      "meta/muse-spark-1.2-contributor"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://www.codebuff.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Freebuff. Registrati su www.codebuff.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "freeinference",
+    "name": "FreeInference",
+    "base_url": "https://freeinference.org/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "FREEINFERENCE_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://freeinference.org",
+    "free_tier_info": "Tier gratuito per sviluppatori su FreeInference. Registrati su freeinference.org per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "freetheai",
+    "name": "FreeTheAi",
+    "base_url": "https://api.freetheai.xyz/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "FREETHEAI_API_KEY",
+    "no_auth": false,
+    "default_model": "gpt-4o-mini",
+    "models": [
+      "gpt-4o-mini",
+      "llama-3.3-70b-instruct",
+      "deepseek-chat"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.freetheai.xyz",
+    "free_tier_info": "Tier gratuito per sviluppatori su FreeTheAi. Registrati su api.freetheai.xyz per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "friendliai",
+    "name": "FriendliAI",
+    "base_url": "https://api.friendli.ai/serverless/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "FRIENDLIAI_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.friendli.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su FriendliAI. Registrati su api.friendli.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "gemini",
+    "name": "Gemini (Google AI Studio)",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "format": "gemini",
+    "auth_type": "bearer",
+    "env_var": "GEMINI_API_KEY",
+    "no_auth": false,
+    "default_model": "gemini-3.5-flash-lite",
+    "models": [
+      "gemini-3.7-flash",
+      "gemini-3.1-pro-preview",
+      "gemini-3.1-flash-lite",
+      "gemini-3-flash-preview",
+      "gemini-3.1-flash-tts-preview",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite"
+    ],
+    "tags": [
+      "reasoning",
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://aistudio.google.com/app/apikey",
+    "free_tier_info": "Google AI Studio offre 15 RPM e 1.500 richieste/giorno gratuite per sempre sui modelli Flash. Basta un account Google personale, nessuna fatturazione cloud necessaria.",
+    "category": "\u264a Google AI Studio"
+  },
+  {
+    "id": "groq",
+    "name": "Groq",
+    "base_url": "https://api.groq.com/openai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "GROQ_API_KEY",
+    "no_auth": false,
+    "default_model": "openai/gpt-oss-120b",
+    "models": [
+      "meta-llama/llama-4-scout-17b-16e-instruct",
+      "llama-3.3-70b-versatile",
+      "groq/compound",
+      "allam-2-7b",
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
+      "qwen/qwen3-32b",
+      "qwen/qwen3.6-27b",
+      "qwen/qwen3.8-27b",
+      "openai/gpt-oss-safeguard-20b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat",
+      "fast"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://console.groq.com/keys",
+    "free_tier_info": "Free Tier permanente generoso: 30 RPM e fino a 14.400 richieste/giorno su gpt-oss-120b e Qwen 3.8. Nessuna carta di credito richiesta, login diretto con Google/GitHub.",
+    "category": "\u26a1 LPUs & Ultra-Fast Inference"
+  },
+  {
+    "id": "hcnsec",
+    "name": "Huancheng Public API",
+    "base_url": "https://api.hcnsec.cn/v1",
+    "format": "claude",
+    "auth_type": "bearer",
+    "env_var": "HCNSEC_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.hcnsec.cn",
+    "free_tier_info": "Tier gratuito per sviluppatori su Huancheng Public API. Registrati su api.hcnsec.cn per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "helyxai",
+    "name": "Helyx AI",
+    "base_url": "https://helyxai.space/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "HELYXAI_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://helyxai.space",
+    "free_tier_info": "Tier gratuito per sviluppatori su Helyx AI. Registrati su helyxai.space per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "huggingchat",
+    "name": "HuggingChat (Free)",
+    "base_url": "https://huggingface.co/chat/conversation",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "HUGGINGCHAT_API_KEY",
+    "no_auth": false,
+    "default_model": "baidu/ERNIE-4.5-VL-424B-A47B-Base-PT",
+    "models": [
+      "baidu/ERNIE-4.5-VL-424B-A47B-Base-PT",
+      "CohereLabs/c4ai-command-r7b-12-2024",
+      "CohereLabs/command-a-reasoning-08-2025",
+      "CohereLabs/command-a-vision-07-2025",
+      "deepseek-ai/DeepSeek-V4-Pro",
+      "deepseek-ai/DeepSeek-V4-Flash",
+      "google/gemma-4-31B-it",
+      "google/gemma-4-26B-A4B-it",
+      "inclusionAI/Ling-2.6-1T",
+      "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://huggingface.co",
+    "free_tier_info": "Tier gratuito per sviluppatori su HuggingChat (Free). Registrati su huggingface.co per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "huggingface",
+    "name": "HuggingFace",
+    "base_url": "https://api-inference.huggingface.co/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "HUGGINGFACE_API_KEY",
+    "no_auth": false,
+    "default_model": "meta-llama/Llama-3.3-70B-Instruct",
+    "models": [
+      "meta-llama/llama-3.1-8b-instruct",
+      "meta-llama/llama-3.2-11b-instruct",
+      "mistralai/mistral-7b-instruct",
+      "google/gemma-2-9b-it",
+      "Qwen/Qwen2.5-7B-Instruct",
+      "deepseek-ai/DeepSeek-V3"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://huggingface.co/settings/tokens",
+    "free_tier_info": "Accesso gratuito a Hugging Face Serverless Inference API per migliaia di modelli open source usando un User Access Token personale gratuito.",
+    "category": "\ud83e\udd17 Community & Open Weights"
+  },
+  {
+    "id": "hyperbolic",
+    "name": "Hyperbolic",
+    "base_url": "https://api.hyperbolic.xyz/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "HYPERBOLIC_API_KEY",
+    "no_auth": false,
+    "default_model": "meta-llama/Llama-3.3-70B-Instruct",
+    "models": [
+      "Qwen/QwQ-32B",
+      "deepseek-ai/DeepSeek-R1",
+      "deepseek-ai/DeepSeek-V3",
+      "meta-llama/Llama-3.3-70B-Instruct",
+      "meta-llama/Llama-3.2-3B-Instruct",
+      "Qwen/Qwen2.5-72B-Instruct",
+      "Qwen/Qwen2.5-Coder-32B-Instruct",
+      "NousResearch/Hermes-3-Llama-3.1-70B"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://app.hyperbolic.xyz/settings",
+    "free_tier_info": "Piattaforma di compute decentralizzato: crediti gratuiti iniziali per Llama 3.3 70B e DeepSeek R1.",
+    "category": "\u26a1 Serverless Inference"
+  },
+  {
+    "id": "iflytek",
+    "name": "iFlytek Spark",
+    "base_url": "https://spark-api-open.xf-yun.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "IFLYTEK_API_KEY",
+    "no_auth": false,
+    "default_model": "4.0Ultra",
+    "models": [
+      "4.0Ultra",
+      "generalv3.5",
+      "max-32k",
+      "generalv3",
+      "pro-128k",
+      "lite"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://spark-api-open.xf-yun.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su iFlytek Spark. Registrati su spark-api-open.xf-yun.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "inception",
+    "name": "Inception",
+    "base_url": "https://api.inceptionlabs.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "INCEPTION_API_KEY",
+    "no_auth": false,
+    "default_model": "mercury-2",
+    "models": [
+      "mercury-2"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://inceptionlabs.ai/",
+    "free_tier_info": "Accesso di ricerca e API gateway veloce per modelli Mercury e community open weights.",
+    "category": "\ud83d\udd25 Serverless Inference"
+  },
+  {
+    "id": "internlm",
+    "name": "InternLM (Intern-S1)",
+    "base_url": "https://chat.intern-ai.org.cn/api/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "INTERNLM_API_KEY",
+    "no_auth": false,
+    "default_model": "intern-s1-pro",
+    "models": [
+      "intern-s1-pro",
+      "intern-s1",
+      "intern-s1-mini",
+      "internvl3.5-latest",
+      "intern-latest"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://chat.intern-ai.org.cn",
+    "free_tier_info": "Tier gratuito per sviluppatori su InternLM (Intern-S1). Registrati su chat.intern-ai.org.cn per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "kiro",
+    "name": "Kiro AI",
+    "base_url": "https://codewhisperer.us-east-1.amazonaws.com/generateAssistantResponse",
+    "format": "kiro",
+    "auth_type": "oauth",
+    "env_var": "KIRO_API_KEY",
+    "no_auth": false,
+    "default_model": "claude-sonnet-5",
+    "models": [
+      "claude-sonnet-5",
+      "claude-sonnet-4.5",
+      "claude-haiku-4.5",
+      "deepseek-3.2",
+      "minimax-m2.5",
+      "minimax-m2.1",
+      "glm-5",
+      "qwen3-coder-next",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://codewhisperer.us-east-1.amazonaws.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Kiro AI. Registrati su codewhisperer.us-east-1.amazonaws.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "liquid",
+    "name": "Liquid AI",
+    "base_url": "https://inference.liquid.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "LIQUID_API_KEY",
+    "no_auth": false,
+    "default_model": "liquid-lfm-40b",
+    "models": [
+      "liquid-lfm-40b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://inference.liquid.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Liquid AI. Registrati su inference.liquid.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "literouter",
+    "name": "LiteRouter",
+    "base_url": "https://api.literouter.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "LITEROUTER_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.literouter.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su LiteRouter. Registrati su api.literouter.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "llm7",
+    "name": "LLM7.io",
+    "base_url": "https://api.llm7.io/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "LLM7_API_KEY",
+    "no_auth": false,
+    "default_model": "gpt-4o-mini-2024-07-18",
+    "models": [
+      "gpt-4o-mini-2024-07-18",
+      "gpt-4.1-nano-2025-04-14",
+      "deepseek-r1-0528",
+      "qwen2.5-coder-32b-instruct"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.llm7.io",
+    "free_tier_info": "Tier gratuito per sviluppatori su LLM7.io. Registrati su api.llm7.io per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "llmgateway",
+    "name": "LLM Gateway",
+    "base_url": "https://api.llmgateway.io/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "LLMGATEWAY_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.llmgateway.io",
+    "free_tier_info": "Tier gratuito per sviluppatori su LLM Gateway. Registrati su api.llmgateway.io per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "lmarena",
+    "name": "Arena (Free)",
+    "base_url": "https://arena.ai/nextjs-api/stream/create-evaluation",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "LMARENA_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://arena.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Arena (Free). Registrati su arena.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "logfare",
+    "name": "Logfare",
+    "base_url": "https://logfare.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "LOGFARE_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://logfare.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Logfare. Registrati su logfare.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "longcat",
+    "name": "LongCat AI",
+    "base_url": "https://api.longcat.chat/openai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "LONGCAT_API_KEY",
+    "no_auth": false,
+    "default_model": "LongCat-2.0",
+    "models": [
+      "LongCat-2.0"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.longcat.chat",
+    "free_tier_info": "Tier gratuito per sviluppatori su LongCat AI. Registrati su api.longcat.chat per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "magnific",
+    "name": "Magnific",
+    "base_url": "https://api.magnific.com/v1/ai/mystic",
+    "format": "magnific-image",
+    "auth_type": "bearer",
+    "env_var": "MAGNIFIC_API_KEY",
+    "no_auth": false,
+    "default_model": "realism",
+    "models": [
+      "realism",
+      "fluid",
+      "zen",
+      "flexible",
+      "super_real",
+      "editorial_portraits"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.magnific.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Magnific. Registrati su api.magnific.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "mistral",
+    "name": "Mistral",
+    "base_url": "https://api.mistral.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "MISTRAL_API_KEY",
+    "no_auth": false,
+    "default_model": "mistral-code-latest",
+    "models": [
+      "mistral-large-latest",
+      "mistral-medium-3-5",
+      "mistral-small-latest",
+      "devstral-latest",
+      "codestral-latest"
+    ],
+    "tags": [
+      "chitchat",
+      "coding",
+      "cloud_free",
+      "tool_supported"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://console.mistral.ai/api-keys/",
+    "free_tier_info": "Tier sperimentale gratuito \"La Plateforme\" per Mistral Nemo, Codestral e Pixtral. Accesso immediato con account GitHub/Google.",
+    "category": "\ud83c\udf2a\ufe0f European Frontier Labs"
+  },
+  {
+    "id": "mixlayer",
+    "name": "Mixlayer",
+    "base_url": "https://models.mixlayer.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "MIXLAYER_API_KEY",
+    "no_auth": false,
+    "default_model": "qwen/qwen3.5-4b-free",
+    "models": [
+      "qwen/qwen3.5-4b-free"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://models.mixlayer.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Mixlayer. Registrati su models.mixlayer.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "modal",
+    "name": "Modal",
+    "base_url": "https://api.modal.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "MODAL_API_KEY",
+    "no_auth": false,
+    "default_model": "google/gemini-2.0-flash",
+    "models": [
+      "google/gemini-2.0-flash"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.modal.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Modal. Registrati su api.modal.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "modelscope",
+    "name": "ModelScope",
+    "base_url": "https://api-inference.modelscope.cn/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "MODELSCOPE_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api-inference.modelscope.cn",
+    "free_tier_info": "Tier gratuito per sviluppatori su ModelScope. Registrati su api-inference.modelscope.cn per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "monsterapi",
+    "name": "MonsterAPI",
+    "base_url": "https://api.monsterapi.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "MONSTERAPI_API_KEY",
+    "no_auth": false,
+    "default_model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "models": [
+      "meta-llama/Meta-Llama-3.1-8B-Instruct",
+      "meta-llama/Llama-3.3-70B-Instruct"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.monsterapi.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su MonsterAPI. Registrati su api.monsterapi.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "morph",
+    "name": "Morph",
+    "base_url": "https://api.morphllm.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "MORPH_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.morphllm.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Morph. Registrati su api.morphllm.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "nara",
+    "name": "NaraRouter",
+    "base_url": "https://router.bynara.id/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "NARA_API_KEY",
+    "no_auth": false,
+    "default_model": "agnes-2.0-flash",
+    "models": [
+      "agnes-2.0-flash",
+      "agnes-2.5-flash",
+      "laguna-s-2.1",
+      "minimax-m3-free",
+      "mistral-large",
+      "mistral-medium-3-5",
+      "qwen3.8-27b",
+      "stepfun-3.7-flash"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://router.bynara.id",
+    "free_tier_info": "Tier gratuito per sviluppatori su NaraRouter. Registrati su router.bynara.id per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "navy",
+    "name": "NavyAI",
+    "base_url": "https://api.navy/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "NAVY_API_KEY",
+    "no_auth": false,
+    "default_model": "llama-3.3-70b-instruct",
+    "models": [
+      "llama-3.3-70b-instruct",
+      "gemma-4-31b-it",
+      "deepseek-v4-flash",
+      "deepseek-chat",
+      "mistral-small-latest",
+      "llama-4-scout"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.navy",
+    "free_tier_info": "Tier gratuito per sviluppatori su NavyAI. Registrati su api.navy per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "nebius",
+    "name": "Nebius AI",
+    "base_url": "https://api.tokenfactory.nebius.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "NEBIUS_API_KEY",
+    "no_auth": false,
+    "default_model": "meta-llama/Llama-3.3-70B-Instruct",
+    "models": [
+      "meta-llama/Llama-3.3-70B-Instruct"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.tokenfactory.nebius.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Nebius AI. Registrati su api.tokenfactory.nebius.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "nlpcloud",
+    "name": "NLP Cloud",
+    "base_url": "https://api.nlpcloud.io/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "NLPCLOUD_API_KEY",
+    "no_auth": false,
+    "default_model": "chatdolphin",
+    "models": [
+      "chatdolphin",
+      "dolphin",
+      "finetuned-llama-3-70b",
+      "llama-3-1-405b",
+      "llama-3-8b-instruct"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.nlpcloud.io",
+    "free_tier_info": "Tier gratuito per sviluppatori su NLP Cloud. Registrati su api.nlpcloud.io per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "novita",
+    "name": "Novita AI",
+    "base_url": "https://api.novita.ai/v3/openai",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "NOVITA_API_KEY",
+    "no_auth": false,
+    "default_model": "meta-llama/llama-3.3-70b-instruct",
+    "models": [
+      "deepseek/deepseek-v4-pro",
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v3.2",
+      "moonshotai/kimi-k3",
+      "moonshotai/kimi-k2.7-code",
+      "moonshotai/kimi-k2.6",
+      "zai-org/glm-5.2",
+      "zai-org/glm-5.1",
+      "zai-org/glm-4.7",
+      "minimax/minimax-m3"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://novita.ai/settings/key-management",
+    "free_tier_info": "Credito gratuito di benvenuto all iscrizione per Llama 3.3, DeepSeek e modelli grafici.",
+    "category": "\u26a1 Serverless Inference"
+  },
+  {
+    "id": "nscale",
+    "name": "nScale",
+    "base_url": "https://inference.api.nscale.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "NSCALE_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://inference.api.nscale.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su nScale. Registrati su inference.api.nscale.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "nvidia",
+    "name": "NVIDIA NIM",
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "NVIDIA_API_KEY",
+    "no_auth": false,
+    "default_model": "meta/llama-3.3-70b-instruct",
+    "models": [
+      "moonshotai/kimi-k3",
+      "deepseek-ai/deepseek-v4-pro-0813",
+      "deepseek-ai/deepseek-v4-flash-0731",
+      "meta/muse-glimmer-30b",
+      "poolside/laguna-xs-2.1",
+      "google/gemma-4-31b-it",
+      "google/diffusiongemma-26b-a4b-it",
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "nvidia/nemotron-3-super-120b-a12b",
+      "nvidia/nemotron-3.5-lightning-30b-a3b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://build.nvidia.com/",
+    "free_tier_info": "NVIDIA NIM Developer Program: 1.000 crediti API gratuiti permanenti per testare modelli su cluster H100/H200 (Llama 3.3, Gemma, Mistral, Qwen).",
+    "category": "\ud83d\udfe2 NVIDIA Enterprise NIM"
+  },
+  {
+    "id": "ofoxai",
+    "name": "OfoxAI",
+    "base_url": "https://api.ofox.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "OFOXAI_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.ofox.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su OfoxAI. Registrati su api.ofox.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "openadapter",
+    "name": "OpenAdapter",
+    "base_url": "https://api.openadapter.in/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "OPENADAPTER_API_KEY",
+    "no_auth": false,
+    "default_model": "glm-4.7",
+    "models": [
+      "glm-4.7"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.openadapter.in",
+    "free_tier_info": "Tier gratuito per sviluppatori su OpenAdapter. Registrati su api.openadapter.in per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "openference",
+    "name": "Openference",
+    "base_url": "https://api.openference.com/v1",
+    "format": "openai",
+    "auth_type": "oauth",
+    "env_var": "OPENFERENCE_API_KEY",
+    "no_auth": false,
+    "default_model": "GLM-5.2",
+    "models": [
+      "GLM-5.2"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.openference.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Openference. Registrati su api.openference.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "OPENROUTER_API_KEY",
+    "no_auth": false,
+    "default_model": "minimax/minimax-m2.7:free",
+    "models": [
+      "auto"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://openrouter.ai/keys",
+    "free_tier_info": "Aggregatore universale con decine di modelli con suffisso \":free\" a costo zero (Minimax M2.7, Gemini Free, Qwen Free). Registrazione con Google o wallet Web3.",
+    "category": "\ud83e\ude90 Cloud Aggregators"
+  },
+  {
+    "id": "openvecta",
+    "name": "OpenVecta",
+    "base_url": "https://api.openvecta.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "OPENVECTA_API_KEY",
+    "no_auth": false,
+    "default_model": "glm-4.7-flash",
+    "models": [
+      "glm-4.7-flash",
+      "claude-sonnet-4.6",
+      "deepseek-v4-flash",
+      "gpt-oss-120b",
+      "gemma-4-31b",
+      "kimi-k2.6",
+      "llama-3.3-70b-instruct",
+      "llama-4-maverick",
+      "nemotron-3-super-120b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.openvecta.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su OpenVecta. Registrati su api.openvecta.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "pollinations",
+    "name": "Pollinations AI",
+    "base_url": "https://text.pollinations.ai/openai",
+    "format": "openai",
+    "auth_type": "optional",
+    "env_var": "POLLINATIONS_API_KEY",
+    "no_auth": false,
+    "default_model": "openai",
+    "models": [
+      "openai",
+      "openai-fast",
+      "openai-large",
+      "qwen-coder",
+      "mistral",
+      "gemini",
+      "gemini-flash-lite-3.1",
+      "gemini-fast",
+      "deepseek",
+      "grok"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://pollinations.ai/",
+    "free_tier_info": "Completamente gratuito e aperto a tutti senza registrazione n\u00e8 chiavi API. Supporta modelli testuali e multimodali open-source.",
+    "category": "\ud83c\udd93 Zero-Auth Free"
+  },
+  {
+    "id": "poolside",
+    "name": "Poolside",
+    "base_url": "https://inference.poolside.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "POOLSIDE_API_KEY",
+    "no_auth": false,
+    "default_model": "poolside/laguna-xs-2.1",
+    "models": [
+      "poolside/laguna-xs-2.1",
+      "poolside/laguna-s-2.1"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://inference.poolside.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Poolside. Registrati su inference.poolside.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "qoder",
+    "name": "Qoder",
+    "base_url": "https://api.qoder.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "QODER_API_KEY",
+    "no_auth": false,
+    "default_model": "qwen3.8-max-preview",
+    "models": [
+      "qwen3.8-max-preview",
+      "qwen3.7-max",
+      "qwen3.7-plus",
+      "kimi-k3",
+      "kimi-k2.7-code",
+      "glm-5.2",
+      "deepseek-v4-pro",
+      "deepseek-v4-flash",
+      "minimax-m3"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.qoder.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Qoder. Registrati su api.qoder.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "reka",
+    "name": "Reka",
+    "base_url": "https://api.reka.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "REKA_API_KEY",
+    "no_auth": false,
+    "default_model": "reka-flash-3",
+    "models": [
+      "reka-flash-3",
+      "reka-flash",
+      "reka-edge-2603"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.reka.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Reka. Registrati su api.reka.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "requesty",
+    "name": "Requesty",
+    "base_url": "https://router.requesty.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "REQUESTY_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://router.requesty.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Requesty. Registrati su router.requesty.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "routeway",
+    "name": "Routeway",
+    "base_url": "https://api.routeway.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "ROUTEWAY_API_KEY",
+    "no_auth": false,
+    "default_model": "llama-3.3-70b-instruct:free",
+    "models": [
+      "llama-3.3-70b-instruct:free",
+      "nemotron-3-nano-30b-a3b:free",
+      "nemotron-nano-9b-v2:free",
+      "step-3.7-flash:free",
+      "step-3.5-flash:free",
+      "laguna-m.1:free",
+      "laguna-xs.2:free",
+      "llama-3.2-3b-instruct:free"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.routeway.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Routeway. Registrati su api.routeway.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "sambanova",
+    "name": "SambaNova",
+    "base_url": "https://api.sambanova.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "SAMBANOVA_API_KEY",
+    "no_auth": false,
+    "default_model": "gpt-oss-120b",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat",
+      "fast"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://cloud.sambanova.ai/apis",
+    "free_tier_info": "Inference ad altissima velocit\u00e0 su chip SN40L. Tier Developer gratuito con quota oraria ripristinata continuamente su Llama 3.3 e Qwen. Login con GitHub.",
+    "category": "\u26a1 LPUs & Ultra-Fast Inference"
+  },
+  {
+    "id": "sarvam",
+    "name": "Sarvam AI",
+    "base_url": "https://api.sarvam.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "SARVAM_API_KEY",
+    "no_auth": false,
+    "default_model": "sarvam-105b",
+    "models": [
+      "sarvam-105b",
+      "sarvam-30b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.sarvam.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Sarvam AI. Registrati su api.sarvam.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "scaleway",
+    "name": "Scaleway AI",
+    "base_url": "https://api.scaleway.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "SCALEWAY_API_KEY",
+    "no_auth": false,
+    "default_model": "qwen3-235b-a22b-instruct-2507",
+    "models": [
+      "qwen3-235b-a22b-instruct-2507",
+      "llama-3.1-70b-instruct",
+      "llama-3.1-8b-instruct",
+      "mistral-small-3.2-24b-instruct-2506",
+      "deepseek-v3-0324",
+      "gpt-oss-120b"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.scaleway.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Scaleway AI. Registrati su api.scaleway.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "sealion",
+    "name": "SEA-LION",
+    "base_url": "https://api.sea-lion.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "SEALION_API_KEY",
+    "no_auth": false,
+    "default_model": "aisingapore/Llama-SEA-LION-v3.5-70B-R",
+    "models": [
+      "aisingapore/Llama-SEA-LION-v3.5-70B-R",
+      "aisingapore/Llama-SEA-LION-v3-70B-IT",
+      "aisingapore/Gemma-SEA-LION-v4-27B-IT",
+      "aisingapore/Qwen-SEA-LION-v4.5-27B-IT",
+      "aisingapore/Qwen-SEA-LION-v4-32B-IT"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.sea-lion.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su SEA-LION. Registrati su api.sea-lion.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "seekai",
+    "name": "SeekAi",
+    "base_url": "https://seekai.cc/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "SEEKAI_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://seekai.cc",
+    "free_tier_info": "Tier gratuito per sviluppatori su SeekAi. Registrati su seekai.cc per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "sensenova",
+    "name": "SenseNova",
+    "base_url": "https://token.sensenova.cn/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "SENSENOVA_API_KEY",
+    "no_auth": false,
+    "default_model": "sensenova-6.7-flash-lite",
+    "models": [
+      "sensenova-6.7-flash-lite",
+      "deepseek-v4-flash",
+      "glm-5.2"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://token.sensenova.cn",
+    "free_tier_info": "Tier gratuito per sviluppatori su SenseNova. Registrati su token.sensenova.cn per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "siliconflow",
+    "name": "SiliconFlow",
+    "base_url": "https://api.siliconflow.cn/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "SILICONFLOW_API_KEY",
+    "no_auth": false,
+    "default_model": "Qwen/Qwen2.5-Coder-32B-Instruct",
+    "models": [
+      "deepseek-ai/DeepSeek-V3.2",
+      "deepseek-ai/DeepSeek-V3.2-Exp",
+      "deepseek-ai/DeepSeek-V3.1",
+      "deepseek-ai/DeepSeek-V3.1-Terminus",
+      "deepseek-ai/DeepSeek-V3",
+      "deepseek-ai/DeepSeek-R1",
+      "deepseek-ai/deepseek-vl2",
+      "nex-agi/DeepSeek-V3.1-Nex-N1",
+      "Qwen/Qwen3.6-35B-A3B",
+      "Qwen/Qwen3.6-27B"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://cloud.siliconflow.cn/account/ak",
+    "free_tier_info": "20 milioni di token gratuiti all attivazione (Qwen 2.5 Coder, DeepSeek V3/R1, GLM). Registrazione con email/GitHub.",
+    "category": "\ud83d\udc09 Asian Frontier AI"
+  },
+  {
+    "id": "sparkdesk",
+    "name": "SparkDesk",
+    "base_url": "https://spark-api-open.xf-yun.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "SPARKDESK_API_KEY",
+    "no_auth": false,
+    "default_model": "4.0Ultra",
+    "models": [
+      "4.0Ultra",
+      "generalv3",
+      "pro-128k",
+      "lite"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://spark-api-open.xf-yun.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su SparkDesk. Registrati su spark-api-open.xf-yun.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "speka",
+    "name": "Speka AI",
+    "base_url": "https://speka.me/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "SPEKA_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://speka.me",
+    "free_tier_info": "Tier gratuito per sviluppatori su Speka AI. Registrati su speka.me per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "stepfun",
+    "name": "StepFun",
+    "base_url": "https://api.stepfun.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "STEPFUN_API_KEY",
+    "no_auth": false,
+    "default_model": "step-3.7-flash",
+    "models": [
+      "step-3.7-flash",
+      "step-3.5-flash",
+      "step-3.5-flash-2603",
+      "step-1o-turbo-vision",
+      "step-1v"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.stepfun.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su StepFun. Registrati su api.stepfun.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "tencent",
+    "name": "Tencent Hunyuan",
+    "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "TENCENT_API_KEY",
+    "no_auth": false,
+    "default_model": "hunyuan-turbos-latest",
+    "models": [
+      "hunyuan-turbos-latest",
+      "hunyuan-t1-latest",
+      "hunyuan-pro",
+      "hunyuan-vision",
+      "hunyuan-functioncall",
+      "hunyuan-lite"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.hunyuan.cloud.tencent.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Tencent Hunyuan. Registrati su api.hunyuan.cloud.tencent.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "tokenreply",
+    "name": "TokenReply",
+    "base_url": "https://api.tokenreply.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "TOKENREPLY_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.tokenreply.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su TokenReply. Registrati su api.tokenreply.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "tokenrouter",
+    "name": "TokenRouter",
+    "base_url": "https://api.tokenrouter.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "TOKENROUTER_API_KEY",
+    "no_auth": false,
+    "default_model": "minimax-3",
+    "models": [
+      "minimax-3",
+      "deepseek-v4-pro",
+      "deepseek-v4-flash"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.tokenrouter.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su TokenRouter. Registrati su api.tokenrouter.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "typhoon",
+    "name": "Typhoon",
+    "base_url": "https://api.opentyphoon.ai/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "TYPHOON_API_KEY",
+    "no_auth": false,
+    "default_model": "typhoon-v2.5-30b-a3b-instruct",
+    "models": [
+      "typhoon-v2.5-30b-a3b-instruct"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.opentyphoon.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su Typhoon. Registrati su api.opentyphoon.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "unorouter",
+    "name": "UnoRouter",
+    "base_url": "https://api.unorouter.com/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "UNOROUTER_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://api.unorouter.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su UnoRouter. Registrati su api.unorouter.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "vertex",
+    "name": "Vertex AI",
+    "base_url": "https://us-central1-aiplatform.googleapis.com/v1/projects",
+    "format": "gemini",
+    "auth_type": "bearer",
+    "env_var": "VERTEX_API_KEY",
+    "no_auth": false,
+    "default_model": "gemini-3.1-pro-preview",
+    "models": [
+      "gemini-3.1-pro-preview",
+      "gemini-3.1-flash-lite",
+      "gemini-3-flash-preview",
+      "gemma-4-31b-it",
+      "DeepSeek-V4-Flash",
+      "DeepSeek-V4-Pro",
+      "Qwen3.6-35B-A3B",
+      "GLM-5.1-FP8",
+      "claude-fable-5-1",
+      "claude-fable-5"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://us-central1-aiplatform.googleapis.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su Vertex AI. Registrati su us-central1-aiplatform.googleapis.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "zenmux",
+    "name": "ZenMux",
+    "base_url": "https://zenmux.ai/api/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "ZENMUX_API_KEY",
+    "no_auth": false,
+    "default_model": "google/gemini-3.1-pro-preview",
+    "models": [
+      "google/gemini-3.1-pro-preview",
+      "google/gemini-3-flash-preview",
+      "openai/gpt-5",
+      "anthropic/claude-sonnet-4.5",
+      "anthropic/claude-opus-4.5",
+      "deepseek/deepseek-chat",
+      "x-ai/grok-4.1-fast",
+      "mistralai/mistral-large-2512",
+      "z-ai/glm-4.6v-flash"
+    ],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://zenmux.ai",
+    "free_tier_info": "Tier gratuito per sviluppatori su ZenMux. Registrati su zenmux.ai per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  },
+  {
+    "id": "zerolimitai",
+    "name": "ZeroLimitAI",
+    "base_url": "https://www.zerolimitai.com/api/v1",
+    "format": "openai",
+    "auth_type": "bearer",
+    "env_var": "ZEROLIMITAI_API_KEY",
+    "no_auth": false,
+    "default_model": "default",
+    "models": [],
+    "tags": [
+      "cloud_free",
+      "chitchat"
+    ],
+    "max_ctx": 131072,
+    "rpm_limit": 30,
+    "tpm_limit": 60000,
+    "signup_url": "https://www.zerolimitai.com",
+    "free_tier_info": "Tier gratuito per sviluppatori su ZeroLimitAI. Registrati su www.zerolimitai.com per generare la chiave API.",
+    "category": "\ud83c\udf10 Cloud AI Provider"
+  }
+]

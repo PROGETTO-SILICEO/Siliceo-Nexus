@@ -21,6 +21,8 @@ mod catalog;
 mod pii;
 mod metrics;
 mod streaming;
+mod resilience;
+mod rtk;
 
 use types::{Provider, ProviderInput, LLMRequest, LLMResponse};
 use metrics::MetricsRegistry;
@@ -70,6 +72,13 @@ async fn main() -> anyhow::Result<()> {
         {
             Ok(r) => info!("🧹 Azzerati {} cooldown scaduti al boot", r.rows_affected()),
             Err(e) => warn!("⚠️ Errore azzeramento cooldown: {}", e),
+        }
+    }
+
+    // Sincronizza provider federati gratuiti/no-auth dal catalogo
+    if let Ok((no_auth, keyed)) = catalog::sync_federated_free_providers(&db).await {
+        if no_auth > 0 || keyed > 0 {
+            info!("🌐 [Federated Catalog] Auto-attivati {} provider no-auth e {} provider con env-key", no_auth, keyed);
         }
     }
 
@@ -123,6 +132,8 @@ async fn main() -> anyhow::Result<()> {
         // Catalog API
         .route("/catalog", get(handle_get_catalog))
         .route("/catalog/sync", post(handle_sync_catalog))
+        .route("/catalog/free", get(handle_get_free_catalog))
+        .route("/catalog/activate/:id", post(handle_activate_catalog_provider))
         // Health & Live Telemetry
         .route("/health", get(handle_health))
         .route("/stats", get(handle_stats))
@@ -230,31 +241,34 @@ fn spawn_provider_assessment(state: AppState) {
 }
 
 /// Applica un cooldown a un provider dopo un errore.
-/// 429 → 120s, 401/403 → 300s (chiave non valida), 5xx → 60s, altri → 15s.
-/// Backoff esponenziale: se già in cooldown, raddoppia (max 600s).
-pub async fn apply_provider_cooldown(state: &AppState, provider: &Provider, status: Option<u16>) {
+/// Applica un cooldown a un provider dopo un errore, usando la classificazione euristica semantica di resilience.
+pub async fn apply_provider_cooldown(state: &AppState, provider: &Provider, status: Option<u16>, err_msg: &str) {
     let now = chrono::Utc::now();
-    let base_secs = match status {
-        Some(401) | Some(403) => 300,
-        Some(429) => 120,
-        Some(code) if code >= 500 && code < 600 => 60,
-        None => 60, // errore di rete/timeout: non riprovare subito (REVIEW 31/08)
-        _ => 15,
-    };
+    let failure = resilience::classify_error(status.unwrap_or(500), None, err_msg);
+    let base_secs = failure.cooldown_duration().as_secs();
 
     let duration = {
         let mut map = state.cooldowns.write().await;
-        let multiplier = match map.get(&provider.name) {
-            Some(until) if *until > now => 2,
-            _ => 1,
+        let secs = if failure.is_quota_exhausted() {
+            // Se la quota è esaurita (daily/monthly/billing), cooldown di almeno 1 ora (non abbattibile con backoff)
+            base_secs.max(3600)
+        } else {
+            let multiplier = match map.get(&provider.name) {
+                Some(until) if *until > now => 2,
+                _ => 1,
+            };
+            (base_secs * multiplier).min(600)
         };
-        let secs = (base_secs * multiplier).min(600);
         let until = now + chrono::Duration::seconds(secs as i64);
         map.insert(provider.name.clone(), until);
         secs
     };
 
-    info!("⏸️ Cooldown '{}' ({}s) dopo errore {:?}", provider.name, duration, status);
+    if failure.is_quota_exhausted() {
+        warn!("🛑 [Quota Exhausted] Provider '{}' escluso per {}s (crediti/limite giornaliero)", provider.name, duration);
+    } else {
+        info!("⏸️ [Cooldown] Provider '{}' in pausa per {}s (status: {:?}, class: {:?})", provider.name, duration, status, failure);
+    }
 
     // Persistenza DB (fire-and-forget)
     let db = state.db.clone();
@@ -425,8 +439,11 @@ async fn handle_chat_completions(
     // REVIEW 31/08: context management anche sul path OpenAI (prima era solo
     // su Anthropic): senza trim, un prompt lungo esplode i provider a ctx basso
     // (beellama 4096, groq TPM 8000) facendo bruciare la cascata in fallimenti.
+    // RTK Context Hygiene: pulizia ANSI escape codes e dedup righe rumorose
+    let mut messages = request.messages;
+    let _ = rtk::sanitize_messages(&mut messages);
     let request = LLMRequest {
-        messages: trim_context(request.messages.clone(), 24_000),
+        messages: trim_context(messages, 24_000),
         ..request
     };
 
@@ -434,7 +451,7 @@ async fn handle_chat_completions(
     let intent = router::classify_intent(&request);
     let requires_tools = request.tools.is_some();
     let intent_str = intent.as_str().to_string();
-    let start = std::time::Instant::now();
+    let _start = std::time::Instant::now();
     {
         let mut m = state.metrics.lock().await;
         m.record_start("chat", &intent_str);
@@ -504,7 +521,7 @@ async fn handle_chat_completions(
                 let has_tools = response.tool_calls.as_ref().map_or(false, |t| !t.is_empty());
                 if !has_text && !has_tools {
                     let err_str = format!("Provider {} ha risposto con contenuto vuoto", p.name);
-                    apply_provider_cooldown(&state, p, Some(502)).await;
+                    apply_provider_cooldown(&state, p, Some(502), &err_str).await;
                     warn!("⚠️ {} — passo al candidato successivo", err_str);
                     last_error = err_str;
                     continue;
@@ -530,7 +547,7 @@ async fn handle_chat_completions(
                     m.record_provider(&p.name, false, latency_ms);
                 }
                 let err_str = e.to_string();
-                apply_provider_cooldown(&state, p, error_status_code(&err_str)).await;
+                apply_provider_cooldown(&state, p, error_status_code(&err_str), &err_str).await;
                 warn!("⚠️ Provider '{}' fallito: {}. Passo al candidato successivo...", p.name, e);
                 last_error = err_str;
             }
@@ -798,9 +815,12 @@ async fn handle_anthropic_messages(
 
     // Context management: limita la storia alle ultime ~24k token stimati
     // (preservando system) per non esplodere il contesto dei provider.
+    // RTK Context Hygiene: pulizia ANSI escape codes e dedup righe ripetute da CLI/tools
+    let mut llm_messages = llm_messages;
+    let _ = rtk::sanitize_messages(&mut llm_messages);
     let llm_messages = trim_context(llm_messages, 24_000);
 
-    let mut llm_req = LLMRequest {
+    let llm_req = LLMRequest {
         messages: llm_messages,
         model: anthropic_req.model.clone(),
         max_tokens: anthropic_req.max_tokens,
@@ -902,7 +922,7 @@ async fn handle_anthropic_messages(
                 let has_tools_resp = res.tool_calls.as_ref().map_or(false, |t| !t.is_empty());
                 if text_out.trim().is_empty() && !has_tools_resp {
                     let err_str = format!("Provider {} ha risposto con contenuto vuoto", p.name);
-                    apply_provider_cooldown(&state, p, Some(502)).await;
+                    apply_provider_cooldown(&state, p, Some(502), &err_str).await;
                     warn!("⚠️ {} — passo al candidato successivo", err_str);
                     last_err = err_str;
                     continue;
@@ -967,7 +987,7 @@ async fn handle_anthropic_messages(
                 }
                 let err_str = e.to_string();
                 warn!("⚠️ [anthropic] Provider '{}' fallito: {}", p.name, err_str);
-                apply_provider_cooldown(&state, p, error_status_code(&err_str)).await;
+                apply_provider_cooldown(&state, p, error_status_code(&err_str), &err_str).await;
                 last_err = err_str;
             }
         }
@@ -1004,7 +1024,7 @@ async fn handle_anthropic_stream(
     state: &AppState,
     eligible: &[Provider],
     llm_req: &LLMRequest,
-    intent_str: &str,
+    _intent_str: &str,
 ) -> Result<axum::response::Response, (StatusCode, String)> {
     use axum::body::Body;
     use axum::response::Response;
@@ -1056,7 +1076,7 @@ async fn handle_anthropic_stream(
                     m.record_provider(&p.name, false, latency_ms);
                 }
                 let err_str = e.to_string();
-                apply_provider_cooldown(&state, p, error_status_code(&err_str)).await;
+                apply_provider_cooldown(&state, p, error_status_code(&err_str), &err_str).await;
                 warn!("⚠️ [anthropic:stream] Provider '{}' fallito: {}", p.name, e);
                 last_err = err_str;
             }
@@ -1450,6 +1470,130 @@ async fn handle_sync_catalog(
         "openrouter_count": or_count,
         "google_count": google_count,
         "total_count": or_count + google_count
+    })))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ActivateProviderPayload {
+    pub api_key: Option<String>,
+    pub model: Option<String>,
+}
+
+async fn handle_get_free_catalog(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let catalog = catalog::load_free_providers_catalog();
+    let current_providers = state.providers.read().await;
+
+    let enriched: Vec<serde_json::Value> = catalog.iter().map(|entry| {
+        let is_active = current_providers.iter().any(|p| {
+            let p_name = p.name.to_lowercase();
+            let e_id = entry.id.to_lowercase();
+            let e_name = entry.name.to_lowercase();
+            p_name == e_id || p_name == e_name || p_name.starts_with(&format!("{}-", e_id)) || p_name.starts_with(&format!("{}_", e_id))
+        });
+        serde_json::json!({
+            "id": entry.id,
+            "name": entry.name,
+            "base_url": entry.base_url,
+            "format": entry.format,
+            "auth_type": entry.auth_type,
+            "env_var": entry.env_var,
+            "no_auth": entry.no_auth,
+            "default_model": entry.default_model,
+            "models": entry.models,
+            "tags": entry.tags,
+            "max_ctx": entry.max_ctx,
+            "rpm_limit": entry.rpm_limit,
+            "tpm_limit": entry.tpm_limit,
+            "signup_url": entry.signup_url,
+            "free_tier_info": entry.free_tier_info,
+            "category": entry.category,
+            "is_active": is_active,
+        })
+    }).collect();
+
+    let total = enriched.len();
+    let no_auth_count = catalog.iter().filter(|e| e.no_auth).count();
+    let active_count = enriched.iter().filter(|e| e["is_active"].as_bool().unwrap_or(false)).count();
+
+    Ok(Json(serde_json::json!({
+        "total": total,
+        "active_count": active_count,
+        "no_auth_count": no_auth_count,
+        "providers": enriched,
+    })))
+}
+
+async fn handle_activate_catalog_provider(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    payload: Option<Json<ActivateProviderPayload>>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    if !is_trusted_ip(peer.ip()) {
+        if let Err((code, msg)) = verify_admin_auth(&headers) {
+            return Err((code, Json(serde_json::json!({ "success": false, "error": msg }))));
+        }
+    }
+
+    let catalog = catalog::load_free_providers_catalog();
+    let entry = catalog.into_iter().find(|e| e.id == id || e.name == id)
+        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(serde_json::json!({ "success": false, "error": format!("Provider '{}' non trovato nel catalogo free", id) }))))?;
+
+    let payload_data = payload.map(|p| p.0);
+    let provided_key = payload_data.as_ref().and_then(|p| p.api_key.clone());
+    let chosen_model = payload_data.as_ref().and_then(|p| p.model.clone()).unwrap_or_else(|| entry.default_model.clone());
+
+    let final_key = if entry.no_auth {
+        None
+    } else if let Some(k) = provided_key {
+        let trimmed = k.trim().to_string();
+        if trimmed.is_empty() { None } else { Some(trimmed) }
+    } else if let Some(ref env_name) = entry.env_var {
+        std::env::var(env_name).ok().filter(|k| !k.trim().is_empty())
+    } else {
+        None
+    };
+
+    if !entry.no_auth && final_key.is_none() {
+        return Err((StatusCode::BAD_REQUEST, Json(serde_json::json!({
+            "success": false,
+            "error": format!("Il provider '{}' richiede una API key. Passala nel JSON {{ \"api_key\": \"...\" }} oppure configurala nell'ambiente ({})", entry.name, entry.env_var.as_deref().unwrap_or("NESSUNA_VAR"))
+        }))));
+    }
+
+    let input = ProviderInput {
+        name: entry.id.clone(),
+        base_url: entry.base_url.clone(),
+        api_key: final_key,
+        auth_type: entry.auth_type.clone(),
+        model: chosen_model,
+        priority: 2,
+        tier: "free".to_string(),
+        tags: entry.tags.clone(),
+        tpm_limit: entry.tpm_limit,
+        rpm_limit: entry.rpm_limit,
+        max_ctx: entry.max_ctx,
+        enabled: true,
+    };
+
+    let db_id = db::insert_provider_db(&state.db, &input).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "success": false, "error": redact_secrets(&e.to_string()) }))))?;
+
+    let updated = db::load_all_providers(&state.db).await;
+    let mut lock = state.providers.write().await;
+    *lock = updated;
+
+    info!("🚀 [Federated Catalog] Provider '{}' attivato a caldo nel pool (id={})", entry.name, db_id);
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "status": "activated",
+        "id": db_id,
+        "name": entry.name,
+        "model": input.model,
+        "tier": input.tier,
     })))
 }
 
