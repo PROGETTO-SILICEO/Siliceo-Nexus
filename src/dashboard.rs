@@ -561,23 +561,23 @@ pub fn render_dashboard() -> Html<&'static str> {
         };
 
         const PRESETS = {
-            groq: { key: "groq", name: "groq-free-pool", url: "https://api.groq.com/openai/v1", tier: "free", priority: 1, tags: "chitchat, fast, groq_free", default_model: "llama-3.3-70b-versatile" },
-            google: { key: "google", name: "gemini-free-tier", url: "https://generativelanguage.googleapis.com/v1beta/openai", tier: "free", priority: 1, tags: "chitchat, coding, fast, google_free", default_model: "gemini-2.5-flash" },
+            groq: { key: "groq", name: "groq-free-pool", url: "https://api.groq.com/openai/v1", tier: "free", priority: 1, tags: "chitchat, fast, groq_free", default_model: "openai/gpt-oss-120b" },
+            google: { key: "google", name: "gemini-free-tier", url: "https://generativelanguage.googleapis.com/v1beta/openai", tier: "free", priority: 1, tags: "chitchat, fast, google_free, long_context", default_model: "gemini-2.5-flash" },
             deepseek: { key: "deepseek", name: "deepseek-cloud", url: "https://api.deepseek.com/v1", tier: "paid", priority: 10, tags: "coding, reasoning, deepseek_r1", default_model: "deepseek-reasoner" },
-            nvidia: { key: "nvidia", name: "nvidia-nim-cloud", url: "https://integrate.api.nvidia.com/v1", tier: "free", priority: 2, tags: "coding, reasoning, nvidia_nim", default_model: "meta/llama-3.3-70b-instruct" },
+            nvidia: { key: "nvidia", name: "nvidia-nim-cloud", url: "https://integrate.api.nvidia.com/v1", tier: "free", priority: 2, tags: "vision, reasoning, nvidia_nim", default_model: "meta/llama-3.2-11b-vision-instruct" },
             qwen: { key: "qwen", name: "alibaba-qwen-dashscope", url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", tier: "free", priority: 3, tags: "coding, reasoning, qwen_coder", default_model: "qwen2.5-coder-32b-instruct" },
-            anthropic: { key: "anthropic", name: "anthropic-claude", url: "https://api.anthropic.com/v1", tier: "paid", priority: 20, tags: "coding, reasoning, vision", default_model: "claude-3-5-sonnet-20241022" },
+            anthropic: { key: "anthropic", name: "anthropic-claude", url: "https://api.anthropic.com/v1", tier: "paid", priority: 20, tags: "coding, reasoning, vision, tool_supported", default_model: "claude-3-5-sonnet-20241022" },
             openai: { key: "openai", name: "openai-official", url: "https://api.openai.com/v1", tier: "paid", priority: 20, tags: "coding, reasoning, tool_supported", default_model: "gpt-4o" },
             aws: { key: "aws", name: "aws-bedrock-mantle", url: "http://localhost:3001/v1", tier: "local", priority: 5, tags: "aws, mantle_proxy", default_model: "bedrock-claude-3.5" },
             inception: { key: "inception", name: "fireworks-inception", url: "https://api.fireworks.ai/inference/v1", tier: "free", priority: 4, tags: "fireworks, inception", default_model: "accounts/fireworks/models/deepseek-r1" },
             agnes: { key: "agnes", name: "agnes-ai-singapore", url: "https://apihub.agnes-ai.com/v1", tier: "free", priority: 1, tags: "agnes_ai, omni_modal, singapore_cloud", default_model: "agnes-v1" },
             mistral: { key: "mistral", name: "mistral-ai-cloud", url: "https://api.mistral.ai/v1", tier: "free", priority: 5, tags: "mistral, codestral", default_model: "codestral-latest" },
-            together: { key: "together", name: "together-ai", url: "https://api.together.xyz/v1", tier: "free", priority: 5, tags: "together, llama3", default_model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo" },
+            together: { key: "together", name: "together-ai", url: "https://api.together.xyz/v1", tier: "free", priority: 5, tags: "together, llama3", default_model: "meta-llama/Llama-3.3-70B-Instruct-Turbo" },
             perplexity: { key: "perplexity", name: "perplexity-sonar", url: "https://api.perplexity.ai", tier: "paid", priority: 10, tags: "search, reasoning, perplexity", default_model: "sonar-reasoning" },
             cerebras: { key: "cerebras", name: "cerebras-fast", url: "https://api.cerebras.ai/v1", tier: "free", priority: 1, tags: "ultra_fast, cerebras", default_model: "llama3.1-70b" },
             sambanova: { key: "sambanova", name: "sambanova-cloud", url: "https://api.sambanova.ai/v1", tier: "free", priority: 2, tags: "sambanova, llama405b", default_model: "Meta-Llama-3.3-70B-Instruct" },
-            openrouter: { key: "openrouter", name: "openrouter-free-pool", url: "https://openrouter.ai/api/v1", tier: "free", priority: 2, tags: "chitchat, coding, openrouter_pool", default_model: "qwen/qwen-2.5-coder-32b:free" },
-            ollama_local: { key: "ollama_local", name: "ollama-local-gpu", url: "http://100.98.20.76:8080/v1", tier: "local", priority: 1, tags: "rtx_2070, local_gpu, tailscale", default_model: "qwen2.5-coder:32b" }
+            openrouter: { key: "openrouter", name: "openrouter-free-pool", url: "https://openrouter.ai/api/v1", tier: "free", priority: 2, tags: "chitchat, coding, openrouter_pool", default_model: "minimax/minimax-m2.7:free" },
+            ollama_local: { key: "ollama_local", name: "ollama-local-gpu", url: "http://100.98.20.76:8080/v1", tier: "local", priority: 1, tags: "rtx_2070, local_gpu, tailscale, tool_supported", default_model: "qwen2.5-coder:32b" }
         };
 
         function getAuthHeaders() {
