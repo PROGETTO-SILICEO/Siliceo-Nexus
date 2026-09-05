@@ -1769,6 +1769,14 @@ async fn handle_fetch_models(
     }
 
     let mut clean_base = payload.base_url.trim_end_matches('/').to_string();
+    if clean_base.ends_with("/chat/completions") {
+        clean_base = clean_base[..clean_base.len() - 17].to_string();
+    } else if clean_base.ends_with("/completions") {
+        clean_base = clean_base[..clean_base.len() - 12].to_string();
+    } else if clean_base.ends_with("/messages") {
+        clean_base = clean_base[..clean_base.len() - 9].to_string();
+    }
+    let mut clean_base = clean_base.trim_end_matches('/').to_string();
     if clean_base.ends_with("/v1") {
         clean_base = clean_base[..clean_base.len() - 3].to_string();
     } else if clean_base.ends_with("/v1beta") {
@@ -1784,6 +1792,8 @@ async fn handle_fetch_models(
         format!("{}/api/tags", clean_base)
     } else if payload.base_url.ends_with("/models") || payload.base_url.ends_with("/tags") {
         payload.base_url.clone()
+    } else if clean_base.contains("generativelanguage.googleapis.com") {
+        format!("{}/v1beta/models", clean_base)
     } else {
         format!("{}/v1/models", clean_base)
     };
