@@ -154,7 +154,8 @@ pub async fn stream_openai_compatible(
         format!("{}/v1/chat/completions", base)
     };
 
-    let (selected_key, _key_count) = pick_api_key(provider.api_key.as_deref(), "OPENROUTER_API_KEY");
+    let all_keys = resolve_provider_keys(provider);
+    let selected_key = pick_ordered_keys(&all_keys).into_iter().next().unwrap_or_default();
 
     let mut req = client.post(&url)
         .timeout(std::time::Duration::from_secs(120))
@@ -188,29 +189,49 @@ pub async fn stream_openai_compatible(
 /// `fetch_add` garantisce rotazione equa tra richieste concorrenti.
 static KEY_ROUND_ROBIN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
-/// Estrae una chiave API attiva usando ROUND-ROBIN deterministico tra le chiavi multiple
-/// (separate da virgola o punto e virgola). Ritorna (chiave, numero_chiavi).
-/// Il contatore atomico avanza ad ogni chiamata: rotazione equa, non pseudo-random.
-fn pick_api_key(api_key_str: Option<&str>, env_fallback: &str) -> (String, usize) {
-    let raw = api_key_str.filter(|k| !k.trim().is_empty()).map(|k| k.to_string())
-        .unwrap_or_else(|| std::env::var(env_fallback).unwrap_or_default());
+/// Risolve tutte le chiavi API configurate per il provider (da campo DB o env var dedicata).
+pub fn resolve_provider_keys(provider: &Provider) -> Vec<String> {
+    let env_name = format!("{}_API_KEY", provider.name.to_uppercase().replace('-', "_"));
+    let raw = if let Some(ref k) = provider.api_key {
+        if !k.trim().is_empty() {
+            k.clone()
+        } else {
+            std::env::var(&env_name).unwrap_or_default()
+        }
+    } else {
+        match provider.name.as_str() {
+            "gemini-free-tier" | "gemini" => std::env::var("GEMINI_API_KEY").unwrap_or_default(),
+            "groq-free-pool" | "groq" => std::env::var("GROQ_API_KEY").unwrap_or_default(),
+            "sambanova-cloud" | "sambanova" => std::env::var("SAMBANOVA_API_KEY").unwrap_or_default(),
+            "cerebras-fast" | "cerebras" => std::env::var("CEREBRAS_API_KEY").unwrap_or_default(),
+            "mistral-ai-cloud" | "mistral" => std::env::var("MISTRAL_API_KEY").unwrap_or_default(),
+            "nvidia-nim-cloud" | "nvidia" => std::env::var("NVIDIA_API_KEY").unwrap_or_default(),
+            "openrouter-free-pool" | "openrouter" => std::env::var("OPENROUTER_API_KEY").unwrap_or_default(),
+            _ => std::env::var(&env_name).unwrap_or_default(),
+        }
+    };
 
     if raw.is_empty() {
-        return ("".to_string(), 0);
+        return Vec::new();
     }
 
-    let keys: Vec<&str> = raw.split(&[',', ';'][..])
-        .map(|s| s.trim())
+    raw.split(&[',', ';'][..])
+        .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .collect();
+        .collect()
+}
 
+/// Ritorna la lista di chiavi ordinata a partire dall'indice di round-robin corrente.
+pub fn pick_ordered_keys(keys: &[String]) -> Vec<String> {
     if keys.is_empty() {
-        return ("".to_string(), 0);
+        return Vec::new();
     }
-
-    // Round-robin deterministico: incremento atomico globale
-    let idx = KEY_ROUND_ROBIN.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % keys.len();
-    (keys[idx].to_string(), keys.len())
+    let start_idx = KEY_ROUND_ROBIN.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % keys.len();
+    let mut ordered = Vec::with_capacity(keys.len());
+    for i in 0..keys.len() {
+        ordered.push(keys[(start_idx + i) % keys.len()].clone());
+    }
+    ordered
 }
 
 async fn try_openai_compatible(
@@ -264,8 +285,6 @@ async fn try_openai_compatible(
         "temperature": request.temperature.unwrap_or(0.7),
     });
 
-    // System message nell'array messages (gemma locale incluso: "system" separato
-    // rompe il tool calling su gemma-4-E4B)
     if !system_prompt.is_empty() {
         let sys_msg = serde_json::json!({"role": "system", "content": system_prompt.trim()});
         if let Some(arr) = body["messages"].as_array_mut() {
@@ -273,7 +292,6 @@ async fn try_openai_compatible(
         }
     }
 
-    // Normalizza tools (Anthropic o OpenAI) → formato OpenAI per il provider
     if let Some(ref tools) = request.tools {
         if let Some(openai_tools) = normalize_tools(tools) {
             body["tools"] = openai_tools;
@@ -283,7 +301,7 @@ async fn try_openai_compatible(
     }
 
     let base = provider.base_url.trim_end_matches('/');
-    let mut url = if base.ends_with("/chat/completions") {
+    let url = if base.ends_with("/chat/completions") {
         base.to_string()
     } else if base.ends_with("/v1") {
         format!("{}/chat/completions", base)
@@ -291,43 +309,55 @@ async fn try_openai_compatible(
         format!("{}/v1/chat/completions", base)
     };
 
-    let (selected_key, _key_count) = match provider.name.as_str() {
-        "gemini-free-tier" => pick_api_key(provider.api_key.as_deref(), "GEMINI_API_KEY"),
-        "groq-free-pool" => pick_api_key(provider.api_key.as_deref(), "GROQ_API_KEY"),
-        _ => pick_api_key(provider.api_key.as_deref(), "OPENROUTER_API_KEY"),
+    let all_keys = resolve_provider_keys(provider);
+    let keys_to_try = if all_keys.is_empty() {
+        vec!["".to_string()]
+    } else {
+        pick_ordered_keys(&all_keys)
     };
 
-    if provider.base_url.contains("generativelanguage.googleapis.com") && !selected_key.is_empty() && !url.contains("key=") {
-        // NB: per l'endpoint OpenAI-compat di Gemini NON usare ?key=: richiede
-        // Authorization: Bearer (con chiave a pagamento ?key= dà 400/401).
-    }
+    let mut last_err = anyhow::anyhow!("Nessuna chiave disponibile per {}", provider.name);
 
-    let mut req = client.post(&url)
-        .timeout(std::time::Duration::from_secs(20))
-        .json(&body);
+    for (k_idx, selected_key) in keys_to_try.iter().enumerate() {
+        let mut req = client.post(&url)
+            .timeout(std::time::Duration::from_secs(20))
+            .json(&body);
 
-    match provider.auth_type.as_str() {        "bearer" => {
-            if !selected_key.is_empty() {
-                req = req.bearer_auth(&selected_key);
+        match provider.auth_type.as_str() {
+            "bearer" => {
+                if !selected_key.is_empty() {
+                    req = req.bearer_auth(selected_key);
+                }
             }
-        }
-        "api-key" => {
-            if !selected_key.is_empty() {
-                req = req.header("x-api-key", &selected_key);
+            "api-key" => {
+                if !selected_key.is_empty() {
+                    req = req.header("x-api-key", selected_key);
+                }
             }
+            _ => {}
         }
-        _ => {}
-    }
 
-    let resp = req.send().await?;
-    let status = resp.status();
+        let resp = match req.send().await {
+            Ok(r) => r,
+            Err(e) => {
+                last_err = e.into();
+                continue;
+            }
+        };
 
-    if !status.is_success() {
-        let err_text = resp.text().await.unwrap_or_default();
-        anyhow::bail!("Provider {} HTTP {}: {}", provider.name, status, err_text);
-    }
+        let status = resp.status();
+        if !status.is_success() {
+            let err_text = resp.text().await.unwrap_or_default();
+            // Se riceviamo 429 e abbiamo altre chiavi nel pool dello stesso provider, proviamo la successiva
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS && k_idx + 1 < keys_to_try.len() {
+                tracing::warn!("⚠️ Chiave API #{} per '{}' ha ricevuto 429. Tentativo chiave successiva nel pool...", k_idx + 1, provider.name);
+                last_err = anyhow::anyhow!("Provider {} HTTP {}: {}", provider.name, status, err_text);
+                continue;
+            }
+            anyhow::bail!("Provider {} HTTP {}: {}", provider.name, status, err_text);
+        }
 
-    let json: serde_json::Value = resp.json().await?;
+        let json: serde_json::Value = resp.json().await?;
 
     let content = json["choices"][0]["message"]["content"]
         .as_str()
@@ -364,31 +394,34 @@ async fn try_openai_compatible(
         .unwrap_or("stop")
         .to_string();
 
-    Ok(LLMResponse {
-        id: format!("chatcmpl-{}", Uuid::new_v4()),
-        object: "chat.completion".to_string(),
-        created: chrono::Utc::now().timestamp(),
-        model: target_model.to_string(),
-        choices: vec![Choice {
-            index: 0,
-            message: Message {
-                tool_call_id: None,
-            tool_name: None,
-            tool_calls_json: None,
-                role: "assistant".to_string(),
-                content,
+        return Ok(LLMResponse {
+            id: format!("chatcmpl-{}", Uuid::new_v4()),
+            object: "chat.completion".to_string(),
+            created: chrono::Utc::now().timestamp(),
+            model: target_model.to_string(),
+            choices: vec![Choice {
+                index: 0,
+                message: Message {
+                    tool_call_id: None,
+                    tool_name: None,
+                    tool_calls_json: None,
+                    role: "assistant".to_string(),
+                    content,
+                },
+                finish_reason,
+            }],
+            usage: UsageInfo {
+                prompt_tokens,
+                completion_tokens,
+                total_tokens: prompt_tokens + completion_tokens,
+                estimated_cost_usd: 0.0, // Calcolato dal router in base al catalogo
             },
-            finish_reason,
-        }],
-        usage: UsageInfo {
-            prompt_tokens,
-            completion_tokens,
-            total_tokens: prompt_tokens + completion_tokens,
-            estimated_cost_usd: 0.0, // Calcolato dal router in base al catalogo
-        },
-        provider_used: provider.name.clone(),
-        tool_calls,
-    })
+            provider_used: provider.name.clone(),
+            tool_calls,
+        });
+    }
+
+    Err(last_err)
 }
 
 async fn try_gemini_native(

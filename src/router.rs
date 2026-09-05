@@ -1,4 +1,4 @@
-use tracing::{info, warn};
+use tracing::info;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::types::{Provider, LLMRequest};

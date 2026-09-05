@@ -134,6 +134,27 @@ pub fn render_dashboard() -> Html<&'static str> {
         .badge { padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
         .badge-free { background: rgba(16, 185, 129, 0.15); color: var(--success); }
         .badge-paid { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+
+        /* Free Roster View & Cards */
+        .free-roster-header { background: var(--panel); border: 1px solid var(--card-border); border-radius: 14px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+        .pills-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+        .pill-filter { background: var(--bg); color: var(--muted); border: 1px solid var(--card-border); padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .pill-filter:hover { color: var(--text); border-color: rgba(56, 189, 248, 0.4); }
+        .pill-filter.active { background: rgba(56, 189, 248, 0.15); color: var(--primary); border-color: var(--primary); box-shadow: 0 0 10px rgba(56, 189, 248, 0.2); }
+
+        .free-card { background: var(--panel); border: 1px solid var(--card-border); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; position: relative; }
+        .free-card:hover { transform: translateY(-3px); border-color: rgba(56, 189, 248, 0.4); box-shadow: 0 8px 25px rgba(0,0,0,0.5); }
+        .free-card.is-active { border-left: 4px solid var(--success); }
+        .free-card.is-inactive { border-left: 4px solid rgba(255,255,255,0.15); }
+
+        .free-info-box { background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 10px 12px; font-size: 0.77rem; color: #cbd5e1; line-height: 1.45; margin: 10px 0; }
+        .signup-link { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; color: var(--primary); text-decoration: none; font-weight: 600; transition: color 0.2s; }
+        .signup-link:hover { text-decoration: underline; color: var(--accent); }
+
+        .btn-activate-primary { background: linear-gradient(135deg, var(--primary), var(--accent)); color: #000; border: none; padding: 8px 14px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer; transition: opacity 0.2s, transform 0.1s; }
+        .btn-activate-primary:hover { opacity: 0.92; transform: scale(1.02); }
+        .btn-configured { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3); padding: 8px 14px; border-radius: 6px; font-weight: 600; font-size: 0.78rem; cursor: pointer; }
+        .btn-configured:hover { background: rgba(16, 185, 129, 0.25); }
     </style>
 </head>
 <body>
@@ -185,16 +206,45 @@ pub fn render_dashboard() -> Html<&'static str> {
     <!-- Navigation Tabs & Add Action -->
     <div class="nav-tabs">
         <div class="tabs-group" id="tabs-bar">
-            <button class="tab-btn active" id="tab-btn-providers" onclick="switchTab('providers')">⚡ Provider Catalog</button>
+            <button class="tab-btn active" id="tab-btn-providers" onclick="switchTab('providers')">⚡ Provider Attivi</button>
+            <button class="tab-btn" id="tab-btn-free-roster" onclick="switchTab('free-roster')">🎁 Roster 100 Free Tier</button>
             <button class="tab-btn" id="tab-btn-catalog" onclick="switchTab('cat-all')">📚 Model Gateway (450+)</button>
             <button class="tab-btn" id="tab-btn-telemetry" onclick="switchTab('telemetry')">📈 Live Telemetry</button>
         </div>
-        <button class="btn-add" onclick="openAddModal()">➕ Registra Provider</button>
+        <button class="btn-add" onclick="openAddModal()">➕ Registra Provider Custom</button>
     </div>
 
     <!-- Main View: Provider Cards Grid -->
     <div id="view-providers" class="cards-grid">
         <!-- Rendered dynamically via JavaScript -->
+    </div>
+
+    <!-- Dedicated View: 100 Free Tier Providers Roster -->
+    <div id="view-free-roster" style="display:none;">
+        <div class="free-roster-header">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+                <div>
+                    <h3 style="color:var(--primary); font-size:1.2rem; display:flex; align-items:center; gap:8px;">
+                        <span>🎁 Roster Federato dei 100 Provider Free-Tier ($0.00 USD)</span>
+                    </h3>
+                    <p style="color:var(--muted); font-size:0.83rem; margin-top:4px;">
+                        Esplora i provider gratuiti, apri la console di registrazione con 1 click, inserisci la chiave API e attivali a caldo nel pool di Siliceo-Nexus.
+                    </p>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="text" id="free-roster-search" placeholder="🔍 Cerca per nome, modello o categoria..." oninput="filterFreeRoster()" style="width:280px; padding:7px 14px; font-size:0.85rem;">
+                </div>
+            </div>
+            <div class="pills-bar">
+                <button class="pill-filter active" id="filter-pill-all" onclick="setFreeFilter('all', this)">Tutti (<span id="count-free-all">100</span>)</button>
+                <button class="pill-filter" id="filter-pill-active" onclick="setFreeFilter('active', this)">🟢 Attivi nel Pool (<span id="count-free-active">0</span>)</button>
+                <button class="pill-filter" id="filter-pill-inactive" onclick="setFreeFilter('inactive', this)">⚪ Da Attivare (<span id="count-free-inactive">0</span>)</button>
+                <button class="pill-filter" id="filter-pill-noauth" onclick="setFreeFilter('noauth', this)">🆓 Zero-Auth (<span id="count-free-noauth">0</span>)</button>
+            </div>
+        </div>
+        <div id="free-roster-grid" class="cards-grid">
+            <!-- Popolato dinamicamente da loadFreeRoster() -->
+        </div>
     </div>
 
     <!-- Alternative View: Model Catalog Table -->
@@ -427,12 +477,51 @@ pub fn render_dashboard() -> Html<&'static str> {
         </div>
     </div>
 
+    <!-- Modal: Activate Free Tier Provider -->
+    <div class="modal-overlay" id="free-activate-modal">
+        <div class="modal-box" style="max-width: 580px;">
+            <h3 id="free-modal-title" style="display:flex; justify-content:space-between; align-items:center;">
+                <span>🚀 Attiva Provider Free-Tier</span>
+                <span style="cursor:pointer; color:var(--muted); font-size:1.1rem;" onclick="closeFreeActivateModal()">✕</span>
+            </h3>
+
+            <div id="free-modal-info-panel" style="margin: 14px 0;">
+                <!-- Filled dynamically with provider info, signup link, free tier info -->
+            </div>
+
+            <form id="free-activate-form" onsubmit="submitFreeActivate(event)">
+                <input type="hidden" id="fa-id">
+                
+                <div class="form-group" id="fa-key-group">
+                    <label style="display:flex; justify-content:space-between;">
+                        <span>Chiave API <span id="fa-key-required-badge" style="color:var(--danger); font-size:0.75rem;">*</span></span>
+                        <span id="fa-env-hint" style="color:var(--muted); font-size:0.75rem;"></span>
+                    </label>
+                    <input type="password" id="fa-key" placeholder="Incolla qui la chiave API ottenuta dal provider..." autocomplete="off">
+                </div>
+
+                <div class="form-group">
+                    <label>Modello Predefinito</label>
+                    <input type="text" id="fa-model" placeholder="es. model-id" required>
+                    <div id="fa-models-chips" style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;"></div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                    <button type="button" style="background:transparent; color:var(--muted); border:1px solid var(--card-border);" onclick="closeFreeActivateModal()">Annulla</button>
+                    <button type="submit" class="btn-activate-primary" id="btn-fa-submit" style="padding:10px 20px; font-size:0.85rem;">⚡ Attiva nel Pool a Caldo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         let loadedProvidersList = [];
         let fullCatalog = [];
         let catalogProvidersMeta = [];
         let activeTabKey = 'providers';
         let currentCatalogSource = 'all';
+        let freeCatalogList = [];
+        let activeFreeFilter = 'all';
 
         const PROVIDER_SVGS = {
             groq: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.5a4.5 4.5 0 1 1 3.18-7.68"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>`,
@@ -865,24 +954,32 @@ pub fn render_dashboard() -> Html<&'static str> {
             activeTabKey = tabKey;
 
             const btnProviders = document.getElementById('tab-btn-providers');
+            const btnFreeRoster = document.getElementById('tab-btn-free-roster');
             const btnCatalog = document.getElementById('tab-btn-catalog');
             const btnTelemetry = document.getElementById('tab-btn-telemetry');
 
             const viewProviders = document.getElementById('view-providers');
+            const viewFreeRoster = document.getElementById('view-free-roster');
             const viewCatalog = document.getElementById('view-catalog');
             const viewTelemetry = document.getElementById('view-telemetry');
 
             btnProviders.classList.remove('active');
+            if (btnFreeRoster) btnFreeRoster.classList.remove('active');
             btnCatalog.classList.remove('active');
             btnTelemetry.classList.remove('active');
 
             viewProviders.style.display = 'none';
+            if (viewFreeRoster) viewFreeRoster.style.display = 'none';
             viewCatalog.style.display = 'none';
             viewTelemetry.style.display = 'none';
 
             if (tabKey === 'providers') {
                 btnProviders.classList.add('active');
                 viewProviders.style.display = 'grid';
+            } else if (tabKey === 'free-roster') {
+                if (btnFreeRoster) btnFreeRoster.classList.add('active');
+                if (viewFreeRoster) viewFreeRoster.style.display = 'block';
+                loadFreeRoster();
             } else if (tabKey === 'telemetry') {
                 btnTelemetry.classList.add('active');
                 viewTelemetry.style.display = 'block';
@@ -896,6 +993,288 @@ pub fn render_dashboard() -> Html<&'static str> {
                     currentCatalogSource = 'all';
                 }
                 filterCatalog();
+            }
+        }
+
+        async function loadFreeRoster() {
+            try {
+                const res = await fetch('/catalog/free');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                freeCatalogList = data.providers || [];
+
+                const elAll = document.getElementById('count-free-all');
+                const elActive = document.getElementById('count-free-active');
+                const elInactive = document.getElementById('count-free-inactive');
+                const elNoAuth = document.getElementById('count-free-noauth');
+
+                if (elAll) elAll.textContent = data.total || freeCatalogList.length;
+                if (elActive) elActive.textContent = data.active_count || 0;
+                if (elInactive) elInactive.textContent = (data.total - data.active_count) || 0;
+                if (elNoAuth) elNoAuth.textContent = data.no_auth_count || 0;
+
+                renderFreeRoster();
+            } catch(e) {
+                console.error("Errore nel caricamento del catalogo free:", e);
+            }
+        }
+
+        function setFreeFilter(filterKey, element) {
+            activeFreeFilter = filterKey;
+            document.querySelectorAll('.pill-filter').forEach(btn => btn.classList.remove('active'));
+            if (element) element.classList.add('active');
+            renderFreeRoster();
+        }
+
+        function filterFreeRoster() {
+            renderFreeRoster();
+        }
+
+        function renderFreeRoster() {
+            const grid = document.getElementById('free-roster-grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+
+            const searchInput = document.getElementById('free-roster-search');
+            const q = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+            const filtered = freeCatalogList.filter(p => {
+                if (activeFreeFilter === 'active' && !p.is_active) return false;
+                if (activeFreeFilter === 'inactive' && p.is_active) return false;
+                if (activeFreeFilter === 'noauth' && !p.no_auth) return false;
+
+                if (q) {
+                    const nameMatch = (p.name || '').toLowerCase().includes(q) || (p.id || '').toLowerCase().includes(q);
+                    const modelMatch = (p.default_model || '').toLowerCase().includes(q);
+                    const catMatch = (p.category || '').toLowerCase().includes(q);
+                    const tagMatch = Array.isArray(p.tags) && p.tags.some(t => t.toLowerCase().includes(q));
+                    const infoMatch = (p.free_tier_info || '').toLowerCase().includes(q);
+                    if (!nameMatch && !modelMatch && !catMatch && !tagMatch && !infoMatch) return false;
+                }
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align:center; padding:50px 20px; color:var(--muted); background:var(--panel); border-radius:14px; border:1px dashed var(--card-border);">
+                        <p style="font-size:1.1rem; margin-bottom:8px;">🔍 Nessun provider trovato per i criteri specificati.</p>
+                        <p style="font-size:0.85rem;">Prova a modificare il filtro o la ricerca.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            filtered.forEach(p => {
+                const card = document.createElement('div');
+                card.className = `free-card ${p.is_active ? 'is-active' : 'is-inactive'}`;
+
+                const category = p.category || 'General';
+                const statusBadge = p.is_active
+                    ? `<span class="badge" style="background:rgba(16,185,129,0.18); color:var(--success); border:1px solid rgba(16,185,129,0.35);">🟢 ATTIVO</span>`
+                    : (p.no_auth
+                        ? `<span class="badge" style="background:rgba(56,189,248,0.18); color:var(--primary); border:1px solid rgba(56,189,248,0.35);">🆓 ZERO-AUTH</span>`
+                        : `<span class="badge" style="background:rgba(148,163,184,0.12); color:#94a3b8; border:1px solid rgba(148,163,184,0.25);">⚪ DA ATTIVARE</span>`);
+
+                const signupBtn = p.signup_url
+                    ? `<a href="${escapeHtml(p.signup_url)}" target="_blank" rel="noopener noreferrer" class="signup-link" title="Apri console di registrazione e chiavi">
+                         <span>🌐 Registrati / Ottieni Chiave ↗</span>
+                       </a>`
+                    : '';
+
+                const actionArea = p.is_active
+                    ? `<div style="display:flex; gap:8px; margin-top:14px;">
+                         <button class="btn-configured" style="flex:1;" onclick="testProviderByName('${escapeHtml(p.id)}')">🧪 Testa Risposta</button>
+                         <button style="background:transparent; border:1px solid var(--card-border); color:var(--muted); padding:8px 12px; border-radius:6px; font-size:0.78rem; cursor:pointer;" onclick="openActivateFreeModal('${escapeHtml(p.id)}')">✏️ Modifica</button>
+                       </div>`
+                    : (p.no_auth
+                        ? `<button class="btn-activate-primary" style="width:100%; margin-top:14px;" onclick="activateNoAuth('${escapeHtml(p.id)}')">⚡ Attiva Subito (Zero Auth)</button>`
+                        : `<button class="btn-activate-primary" style="width:100%; margin-top:14px;" onclick="openActivateFreeModal('${escapeHtml(p.id)}')">🔑 Inserisci Chiave &amp; Attiva</button>`);
+
+                card.innerHTML = `
+                    <div>
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px;">
+                            <div>
+                                <span class="badge" style="background:rgba(56,189,248,0.1); color:var(--primary); margin-bottom:6px; display:inline-block;">${escapeHtml(category)}</span>
+                                <h4 style="color:var(--text); font-size:1.02rem; font-weight:700; margin:0;">${escapeHtml(p.name)}</h4>
+                            </div>
+                            <div>${statusBadge}</div>
+                        </div>
+
+                        <div style="margin-bottom:8px; font-size:0.8rem;">
+                            <span style="color:var(--muted);">Modello: </span>
+                            <code style="color:var(--primary); background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:4px; font-size:0.78rem;">${escapeHtml(p.default_model)}</code>
+                        </div>
+
+                        <div class="free-info-box">
+                            <div style="font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:5px; color:#f1f5f9;">
+                                <span>💡 Come funziona il Free Tier</span>
+                            </div>
+                            <div>${escapeHtml(p.free_tier_info || 'Disponibile gratuitamente con registrazione.')}</div>
+                            ${p.env_var ? `<div style="margin-top:6px; font-size:0.72rem; color:var(--muted);">Env Var: <code style="color:#e2e8f0;">${escapeHtml(p.env_var)}</code></div>` : ''}
+                        </div>
+
+                        <div style="margin-top:8px;">
+                            ${signupBtn}
+                        </div>
+                    </div>
+
+                    <div>
+                        ${actionArea}
+                    </div>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        function openActivateFreeModal(id) {
+            const p = freeCatalogList.find(x => x.id === id || x.name === id);
+            if (!p) {
+                alert("Provider non trovato nel catalogo.");
+                return;
+            }
+
+            document.getElementById('fa-id').value = p.id;
+            document.getElementById('free-modal-title').innerHTML = `
+                <span>🚀 Configura &amp; Attiva ${escapeHtml(p.name)}</span>
+                <span style="cursor:pointer; color:var(--muted); font-size:1.1rem;" onclick="closeFreeActivateModal()">✕</span>
+            `;
+
+            const infoPanel = document.getElementById('free-modal-info-panel');
+            const signupLinkHtml = p.signup_url
+                ? `<a href="${escapeHtml(p.signup_url)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:rgba(56,189,248,0.15); border:1px solid var(--primary); border-radius:6px; color:var(--primary); text-decoration:none; font-weight:600; font-size:0.83rem; margin-top:8px;">
+                     <span>🌐 Apri Console di Registrazione / Richiedi Chiave API ↗</span>
+                   </a>`
+                : '';
+
+            infoPanel.innerHTML = `
+                <div style="background:rgba(0,0,0,0.3); border:1px solid var(--card-border); border-radius:10px; padding:14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span class="badge" style="background:rgba(56,189,248,0.15); color:var(--primary);">${escapeHtml(p.category || 'Free Provider')}</span>
+                        <span style="font-size:0.75rem; color:var(--muted);">${escapeHtml(p.base_url)}</span>
+                    </div>
+                    <div style="font-size:0.82rem; color:#cbd5e1; line-height:1.45;">
+                        <strong style="color:var(--text);">💡 Istruzioni Tier Gratuito:</strong><br>
+                        ${escapeHtml(p.free_tier_info || 'Registrati sul portale ufficiale per ottenere le credenziali gratuite.')}
+                    </div>
+                    ${signupLinkHtml}
+                </div>
+            `;
+
+            const keyGroup = document.getElementById('fa-key-group');
+            const envHint = document.getElementById('fa-env-hint');
+            const reqBadge = document.getElementById('fa-key-required-badge');
+            const keyInput = document.getElementById('fa-key');
+            keyInput.value = '';
+
+            if (p.no_auth) {
+                keyGroup.style.display = 'none';
+                reqBadge.style.display = 'none';
+            } else {
+                keyGroup.style.display = 'block';
+                reqBadge.style.display = 'inline';
+                if (p.env_var) {
+                    envHint.innerText = `Var ambiente: ${p.env_var}`;
+                } else {
+                    envHint.innerText = '';
+                }
+            }
+
+            const modelInput = document.getElementById('fa-model');
+            modelInput.value = p.default_model || '';
+
+            const chipsBox = document.getElementById('fa-models-chips');
+            chipsBox.innerHTML = '';
+            if (Array.isArray(p.models) && p.models.length > 1) {
+                p.models.slice(0, 6).forEach(m => {
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.style = 'background:var(--bg); color:var(--muted); border:1px solid var(--card-border); padding:3px 8px; border-radius:4px; font-size:0.72rem; cursor:pointer;';
+                    chip.textContent = m;
+                    chip.onclick = () => { modelInput.value = m; };
+                    chipsBox.appendChild(chip);
+                });
+            }
+
+            document.getElementById('free-activate-modal').style.display = 'flex';
+        }
+
+        function closeFreeActivateModal() {
+            document.getElementById('free-activate-modal').style.display = 'none';
+        }
+
+        async function submitFreeActivate(e) {
+            e.preventDefault();
+            const id = document.getElementById('fa-id').value;
+            const apiKey = document.getElementById('fa-key').value.trim();
+            const model = document.getElementById('fa-model').value.trim();
+
+            const p = freeCatalogList.find(x => x.id === id || x.name === id);
+            if (p && !p.no_auth && !apiKey) {
+                alert("⚠️ È richiesta una API Key per attivare questo provider (oppure configurala come variabile d'ambiente sul server).");
+                return;
+            }
+
+            const btn = document.getElementById('btn-fa-submit');
+            btn.disabled = true;
+            btn.innerText = 'Attivazione in corso...';
+
+            try {
+                const res = await fetch(`/catalog/activate/${encodeURIComponent(id)}`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                        api_key: apiKey || null,
+                        model: model || null
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    alert(`✅ Provider '${data.name || id}' attivato a caldo nel pool!`);
+                    closeFreeActivateModal();
+                    await loadFreeRoster();
+                    await loadProviders();
+                } else {
+                    alert(`❌ Errore attivazione: ${data.error || 'Errore sconosciuto'}`);
+                }
+            } catch(err) {
+                alert(`❌ Errore di rete: ${err.message || err}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '⚡ Attiva nel Pool a Caldo';
+            }
+        }
+
+        async function activateNoAuth(id) {
+            if (!confirm(`Vuoi attivare a caldo il provider Zero-Auth '${id}' nel pool?`)) return;
+
+            try {
+                const res = await fetch(`/catalog/activate/${encodeURIComponent(id)}`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({})
+                });
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    alert(`✅ Provider '${id}' attivato con successo a caldo nel pool!`);
+                    await loadFreeRoster();
+                    await loadProviders();
+                } else {
+                    alert(`❌ Errore attivazione: ${data.error || 'Errore sconosciuto'}`);
+                }
+            } catch(err) {
+                alert(`❌ Errore di rete: ${err.message || err}`);
+            }
+        }
+
+        function testProviderByName(idOrName) {
+            const p = loadedProvidersList.find(x => x.name === idOrName || x.name.toLowerCase() === idOrName.toLowerCase() || String(x.id) === String(idOrName));
+            if (p && p.id) {
+                testProvider(p.id);
+            } else {
+                alert(`⚠️ Provider '${idOrName}' non trovato nella lista dei provider attivi caricati. Prova a ricaricare la pagina.`);
             }
         }
 
@@ -1143,6 +1522,7 @@ pub fn render_dashboard() -> Html<&'static str> {
 
         loadProviders();
         loadCatalog();
+        loadFreeRoster();
         loadLiveStats();
         setInterval(loadLiveStats, 2000);
     </script>
