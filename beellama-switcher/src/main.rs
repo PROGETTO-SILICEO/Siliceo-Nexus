@@ -19,6 +19,9 @@ pub struct AppState {
     pub beellama_bin: String,
     pub internal_port: u16,
     pub context_size: u32,
+    pub default_cache_k: String,
+    pub default_cache_v: String,
+    pub default_flash_attn: String,
     pub active_process: Arc<Mutex<Option<tokio::process::Child>>>,
     pub active_model: Arc<Mutex<String>>,
     pub client: reqwest::Client,
@@ -35,6 +38,11 @@ pub struct ModelItem {
 #[derive(Deserialize)]
 pub struct SwitchModelRequest {
     pub model: String,
+    pub cache_k: Option<String>,
+    pub cache_v: Option<String>,
+    pub flash_attn: Option<String>,
+    pub context_size: Option<u32>,
+    pub draft_model: Option<String>,
 }
 
 #[tokio::main]
@@ -62,12 +70,21 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| "8192".to_string())
         .parse::<u32>()
         .unwrap_or(8192);
+    let default_cache_k = std::env::var("BEELLAMA_CACHE_K")
+        .unwrap_or_else(|_| "turbo4".to_string());
+    let default_cache_v = std::env::var("BEELLAMA_CACHE_V")
+        .unwrap_or_else(|_| "turbo3_tcq".to_string());
+    let default_flash_attn = std::env::var("BEELLAMA_FLASH_ATTN")
+        .unwrap_or_else(|_| "on".to_string());
 
     let state = AppState {
         models_dir,
         beellama_bin,
         internal_port,
         context_size,
+        default_cache_k,
+        default_cache_v,
+        default_flash_attn,
         active_process: Arc::new(Mutex::new(None)),
         active_model: Arc::new(Mutex::new("none".to_string())),
         client: reqwest::Client::builder()
@@ -108,6 +125,9 @@ async fn handle_health(State(state): State<AppState>) -> Json<serde_json::Value>
         "service": "beellama-switcher-rust",
         "active_model": current,
         "internal_port": state.internal_port,
+        "default_cache_k": state.default_cache_k,
+        "default_cache_v": state.default_cache_v,
+        "default_flash_attn": state.default_flash_attn,
         "models_dir": state.models_dir.to_string_lossy()
     }))
 }
@@ -183,13 +203,30 @@ async fn handle_switch_model(
     // Attendi che la VRAM si liberi
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
-    info!("🚀 Avvio nuovo modello su RTX 2070 GPU: '{}'", model_name);
-    // Context PER MODELLO: gemma-4-E4B supporta 64k, qwen-coder 7B 32k,
-    // gli altri restano al default. Un context troppo alto su 8GB VRAM
-    // impedisce il caricamento (KV cache enorme).
-    let model_ctx = context_for_model(model_name, state.context_size);
-    let child_res = tokio::process::Command::new(&state.beellama_bin)
-        .arg("--model")
+    let req_cache_k = payload.cache_k.clone().unwrap_or_else(|| {
+        let lower = model_name.to_lowercase();
+        if lower.contains("9b") || lower.contains("35b") {
+            "turbo4".to_string()
+        } else {
+            state.default_cache_k.clone()
+        }
+    });
+    let req_cache_v = payload.cache_v.clone().unwrap_or_else(|| {
+        let lower = model_name.to_lowercase();
+        if lower.contains("9b") || lower.contains("35b") {
+            "turbo3_tcq".to_string()
+        } else {
+            state.default_cache_v.clone()
+        }
+    });
+    let req_flash_attn = payload.flash_attn.clone().unwrap_or_else(|| state.default_flash_attn.clone());
+    let model_ctx = payload.context_size.unwrap_or_else(|| context_for_model(model_name, state.context_size));
+
+    info!("🚀 Avvio nuovo modello su RTX 2070 GPU: '{}' (ctx: {}, KV: {}/{}, FA: {})",
+          model_name, model_ctx, req_cache_k, req_cache_v, req_flash_attn);
+
+    let mut cmd = tokio::process::Command::new(&state.beellama_bin);
+    cmd.arg("--model")
         .arg(&target_path)
         .arg("--port")
         .arg(state.internal_port.to_string())
@@ -199,7 +236,24 @@ async fn handle_switch_model(
         .arg("99")
         .arg("-c")
         .arg(model_ctx.to_string())
-        .spawn();
+        .arg("-fa")
+        .arg(&req_flash_attn);
+
+    if !req_cache_k.is_empty() && req_cache_k != "f16" {
+        cmd.arg("-ctk").arg(&req_cache_k);
+    }
+    if !req_cache_v.is_empty() && req_cache_v != "f16" {
+        cmd.arg("-ctv").arg(&req_cache_v);
+    }
+
+    if let Some(ref draft) = payload.draft_model {
+        let draft_path = state.models_dir.join(draft);
+        if draft_path.exists() {
+            cmd.arg("-md").arg(draft_path).arg("-ngld").arg("99");
+        }
+    }
+
+    let child_res = cmd.spawn();
 
     match child_res {
         Ok(child) => {
@@ -217,12 +271,16 @@ async fn handle_switch_model(
 
             match ready {
                 Ok(true) => {
-                    info!("✅ Processo beellama riavviato con successo per '{}' (server pronto)", model_name);
+                    info!("✅ Processo beellama riavviato con successo per '{}' (server pronto, KV: {}/{})", model_name, req_cache_k, req_cache_v);
                     Ok(Json(serde_json::json!({
                         "status": "switched",
                         "model": model_name,
                         "path": target_path.to_string_lossy(),
-                        "internal_port": state.internal_port
+                        "internal_port": state.internal_port,
+                        "context_size": model_ctx,
+                        "cache_type_k": req_cache_k,
+                        "cache_type_v": req_cache_v,
+                        "flash_attn": req_flash_attn
                     })))
                 }
                 Ok(false) => Err((StatusCode::GATEWAY_TIMEOUT, "Modello avviato ma server non pronto in tempo".to_string())),
