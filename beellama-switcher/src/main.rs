@@ -43,6 +43,7 @@ pub struct SwitchModelRequest {
     pub flash_attn: Option<String>,
     pub context_size: Option<u32>,
     pub draft_model: Option<String>,
+    pub slots: Option<u32>,
 }
 
 #[tokio::main]
@@ -236,6 +237,8 @@ async fn handle_switch_model(
         .arg("99")
         .arg("-c")
         .arg(model_ctx.to_string())
+        .arg("-np")
+        .arg(payload.slots.unwrap_or(1).to_string())
         .arg("-fa")
         .arg(&req_flash_attn);
 
@@ -340,7 +343,7 @@ async fn handle_proxy_chat(
 /// Un context troppo alto su 8GB VRAM impedisce il load (KV cache).
 fn context_for_model(model_name: &str, default_ctx: u32) -> u32 {
     let lower = model_name.to_lowercase();
-    if lower.contains("gemma") || lower.contains("e4b") {
+    if lower.contains("gemma") || lower.contains("e4b") || lower.contains("qwen3.8") || lower.contains("distill") || lower.contains("heretic") || lower.contains("ornith") || lower.contains("defiant") {
         65536
     } else if lower.contains("qwen2.5-coder") || lower.contains("coder-7b") {
         32768
