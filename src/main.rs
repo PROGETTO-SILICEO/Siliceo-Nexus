@@ -465,6 +465,11 @@ async fn handle_chat_completions(
         return Err((StatusCode::SERVICE_UNAVAILABLE, "Nessun provider LLM disponibile".to_string()));
     }
 
+    // PIN MODELLO (mandato Alfonso 30/09/2026): una richiesta che esplicita il
+    // modello (es. PARLAMENTO_MODEL per Nova) ottiene il provider corrispondente
+    // in testa alla cascata; il resto resta come fallback. "auto" → routing normale.
+    let eligible = router::pin_model_first(eligible, request.model.as_deref());
+
     let mut last_error = String::new();
 
     // --- Rizzo PII: filtro reversibile prima del forward ---

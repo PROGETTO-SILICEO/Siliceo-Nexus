@@ -8,3 +8,6 @@
 .env.*
 !.env.example
 /data/*.jsonl
+
+# backup DB locali (contengono api_key)
+data/*.bak*
