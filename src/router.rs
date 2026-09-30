@@ -127,6 +127,44 @@ pub async fn select_eligible_providers(
     eligible
 }
 
+/// PIN MODELLO (mandato Alfonso 30/09/2026): se la richiesta esplicita un
+/// modello (≠ "auto"/vuoto), i provider che lo servono vengono messi in testa
+/// alla cascata. Il resto resta disponibile come fallback se il pin fallisce:
+/// la richiesta non può mai restare senza risposta.
+pub fn pin_model_first(eligible: Vec<Provider>, requested: Option<&str>) -> Vec<Provider> {
+    let want = match requested {
+        Some(m) => {
+            let m = m.trim();
+            if m.is_empty() || m.eq_ignore_ascii_case("auto") {
+                return eligible;
+            }
+            m.to_lowercase()
+        }
+        None => return eligible,
+    };
+
+    let mut pinned: Vec<Provider> = Vec::new();
+    let mut rest: Vec<Provider> = Vec::new();
+    for p in eligible {
+        if p.model.trim().to_lowercase() == want {
+            pinned.push(p);
+        } else {
+            rest.push(p);
+        }
+    }
+
+    if !pinned.is_empty() {
+        info!(
+            "📌 Pin modello '{}': {} provider in testa, cascata di fallback: {}",
+            want,
+            pinned.len(),
+            rest.len()
+        );
+    }
+    pinned.extend(rest);
+    pinned
+}
+
 /// Seleziona il miglior provider singolo disponibile
 pub async fn select_provider(
     providers: &Arc<RwLock<Vec<Provider>>>,
@@ -140,5 +178,71 @@ pub async fn select_provider(
         Ok(first.clone())
     } else {
         Err("Nessun provider LLM attivo o disponibile in Siliceo-Nexus".to_string())
+    }
+}
+
+#[cfg(test)]
+mod pin_tests {
+    use super::*;
+
+    fn provider(name: &str, model: &str) -> Provider {
+        Provider {
+            id: None,
+            name: name.into(),
+            base_url: "http://x".into(),
+            api_key: None,
+            auth_type: "bearer".into(),
+            model: model.into(),
+            priority: 1,
+            tier: "free".into(),
+            tags: vec![],
+            tpm_limit: 0,
+            rpm_limit: 0,
+            max_ctx: 32_000,
+            enabled: true,
+            cooldown_until: None,
+        }
+    }
+
+    #[test]
+    fn pin_porta_il_modello_richiesto_in_testa() {
+        let c = vec![
+            provider("a", "model-x"),
+            provider("b", "gemini-3.5-flash-lite"),
+            provider("c", "model-y"),
+        ];
+        let out = pin_model_first(c, Some("gemini-3.5-flash-lite"));
+        assert_eq!(out[0].name, "b");
+        assert_eq!(out.len(), 3, "la cascata completa deve restare come fallback");
+    }
+
+    #[test]
+    fn pin_auto_o_assente_non_cambia_nulla() {
+        let c = vec![provider("a", "model-x"), provider("b", "model-y")];
+        let out1 = pin_model_first(c.clone(), Some("auto"));
+        let out2 = pin_model_first(c.clone(), None);
+        let out3 = pin_model_first(c.clone(), Some("   "));
+        assert_eq!(out1[0].name, "a");
+        assert_eq!(out2[0].name, "a");
+        assert_eq!(out3[0].name, "a");
+        assert_eq!(out1.len(), 2);
+    }
+
+    #[test]
+    fn pin_modello_inesistente_lascia_la_cascata_intatta() {
+        let c = vec![provider("a", "model-x"), provider("b", "model-y")];
+        let out = pin_model_first(c, Some("non-existent"));
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].name, "a");
+    }
+
+    #[test]
+    fn pin_case_insensitive_e_trim() {
+        let c = vec![
+            provider("a", "model-x"),
+            provider("b", "Gemini-3.5-Flash-Lite"),
+        ];
+        let out = pin_model_first(c, Some("  GEMINI-3.5-FLASH-LITE "));
+        assert_eq!(out[0].name, "b");
     }
 }
