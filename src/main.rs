@@ -870,6 +870,11 @@ async fn handle_anthropic_messages(
         return Err((StatusCode::SERVICE_UNAVAILABLE, "Nessun provider LLM disponibile".to_string()));
     }
 
+    // PIN MODELLO anche su Anthropic (30/09): `claude --model X` arriva qui e
+    // deve ottenere lo stesso trattamento del path OpenAI — provider del modello
+    // in testa alla cascata, resto come fallback.
+    let eligible = router::pin_model_first(eligible, llm_req.model.as_deref());
+
     // STREAMING: se il client chiede stream, rispondi in SSE (Anthropic format)
     info!("🔧 [anthropic] stream richiesto: {:?}", llm_req.stream);
     if llm_req.stream == Some(true) {

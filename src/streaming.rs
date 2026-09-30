@@ -31,6 +31,11 @@ pub struct AnthropicSseStream<S> {
     input_tokens: u64,
     model: String,
     message_id: String,
+    /// Buffer delle righe SSE parziali: i chunk HTTP non coincidono con i
+    /// confini riga, senza questo buffer una riga tagliata a metà tra due
+    /// chunk veniva scartata (JSON incompleto → continue) e il testo del
+    /// primo evento andava perduto (bug 30/09/2026: "Silvestro" → "vestro").
+    line_buffer: String,
 }
 
 impl<S> AnthropicSseStream<S>
@@ -48,6 +53,7 @@ where
             input_tokens,
             model,
             message_id,
+            line_buffer: String::new(),
         }
     }
 
@@ -168,6 +174,93 @@ where
             self.current_block = None;
         }
     }
+
+    /// Processa una riga SSE COMPLETA (con il suo confine garantito dal buffer
+    /// di `line_buffer`) e appende gli eventi Anthropic a `out`.
+    fn process_line(&mut self, raw: &str, out: &mut String, consumed_stop: &mut bool) {
+        let line = raw.trim();
+        if !line.starts_with("data:") {
+            return;
+        }
+        let payload = line[5..].trim();
+        if payload == "[DONE]" {
+            *consumed_stop = true;
+            return;
+        }
+        let value: serde_json::Value = match serde_json::from_str(payload) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+
+        let choice = &value["choices"][0];
+        let delta = &choice["delta"];
+
+        // Testo: accumula in un unico blocco finché il tipo non cambia
+        if let Some(txt) = delta["content"].as_str() {
+            if !txt.is_empty() {
+                if self.current_block.as_deref() != Some("text") {
+                    self.close_block(out);
+                    out.push_str(&self.block_start_text(self.block_index));
+                    self.current_block = Some("text".to_string());
+                }
+                out.push_str(&self.text_delta(self.block_index, txt));
+                self.output_tokens += (txt.chars().count() / 4).max(1) as u64;
+            }
+        }
+
+        // Reasoning: blocco thinking (modelli che emettono reasoning prima del testo)
+        if let Some(r) = delta["reasoning"].as_str() {
+            if !r.is_empty() {
+                if self.current_block.as_deref() != Some("thinking") {
+                    self.close_block(out);
+                    out.push_str(&self.block_start_thinking(self.block_index));
+                    self.current_block = Some("thinking".to_string());
+                }
+                out.push_str(&self.thinking_delta(self.block_index, r));
+                self.output_tokens += (r.chars().count() / 4).max(1) as u64;
+            }
+        }
+
+        // Tool calls (possono arrivare frammentati)
+        if let Some(tc) = delta["tool_calls"].as_array() {
+            for call in tc {
+                let fn_name = call["function"]["name"].as_str();
+                let fn_args = call["function"]["arguments"].as_str().unwrap_or("");
+                let call_id = call["id"].as_str().unwrap_or("");
+
+                if self.current_block.as_deref() != Some("tool") {
+                    self.close_block(out);
+                    if let Some(name) = fn_name {
+                        out.push_str(&self.block_start_tool(self.block_index, call_id, name));
+                    } else {
+                        out.push_str(&self.block_start_tool(self.block_index, "toolu_unknown", "tool"));
+                    }
+                    self.current_block = Some("tool".to_string());
+                    self.block_index += 1;
+                }
+                if !fn_args.is_empty() {
+                    out.push_str(&self.tool_delta(self.block_index.saturating_sub(1), fn_args));
+                    self.output_tokens += (fn_args.chars().count() / 4).max(1) as u64;
+                }
+            }
+        }
+
+        // finish_reason → stop_reason
+        if let Some(fr) = choice["finish_reason"].as_str() {
+            if !fr.is_empty() && fr != "null" {
+                let stop_reason = match fr {
+                    "tool_calls" => "tool_use",
+                    "length" => "max_tokens",
+                    "stop" => "end_turn",
+                    _ => "end_turn",
+                };
+                self.close_block(out);
+                out.push_str(&self.message_delta(stop_reason));
+                out.push_str(&self.message_stop());
+                self.finished = true;
+            }
+        }
+    }
 }
 
 impl<S> Stream for AnthropicSseStream<S>
@@ -190,93 +283,15 @@ where
 
         match self.inner.poll_next_unpin(cx) {
             Poll::Ready(Some(Ok(chunk))) => {
-                let text = String::from_utf8_lossy(&chunk);
+                self.line_buffer.push_str(&String::from_utf8_lossy(&chunk));
                 let mut out = String::new();
                 let mut consumed_stop = false;
 
-                for line in text.split('\n') {
-                    let line = line.trim();
-                    if !line.starts_with("data:") {
-                        continue;
-                    }
-                    let payload = line[5..].trim();
-                    if payload == "[DONE]" {
-                        consumed_stop = true;
-                        continue;
-                    }
-                    let value: serde_json::Value = match serde_json::from_str(payload) {
-                        Ok(v) => v,
-                        Err(_) => continue,
-                    };
-
-                    let choice = &value["choices"][0];
-                    let delta = &choice["delta"];
-
-                    // Testo: accumula in un unico blocco finché il tipo non cambia
-                    if let Some(txt) = delta["content"].as_str() {
-                        if !txt.is_empty() {
-                            if self.current_block.as_deref() != Some("text") {
-                                self.close_block(&mut out);
-                                out.push_str(&self.block_start_text(self.block_index));
-                                self.current_block = Some("text".to_string());
-                            }
-                            out.push_str(&self.text_delta(self.block_index, txt));
-                            self.output_tokens += (txt.chars().count() / 4).max(1) as u64;
-                        }
-                    }
-
-                    // Reasoning: blocco thinking (modelli che emettono reasoning prima del testo)
-                    if let Some(r) = delta["reasoning"].as_str() {
-                        if !r.is_empty() {
-                            if self.current_block.as_deref() != Some("thinking") {
-                                self.close_block(&mut out);
-                                out.push_str(&self.block_start_thinking(self.block_index));
-                                self.current_block = Some("thinking".to_string());
-                            }
-                            out.push_str(&self.thinking_delta(self.block_index, r));
-                            self.output_tokens += (r.chars().count() / 4).max(1) as u64;
-                        }
-                    }
-
-                    // Tool calls (possono arrivare frammentati)
-                    if let Some(tc) = delta["tool_calls"].as_array() {
-                        for call in tc {
-                            let fn_name = call["function"]["name"].as_str();
-                            let fn_args = call["function"]["arguments"].as_str().unwrap_or("");
-                            let call_id = call["id"].as_str().unwrap_or("");
-
-                            if self.current_block.as_deref() != Some("tool") {
-                                self.close_block(&mut out);
-                                if let Some(name) = fn_name {
-                                    out.push_str(&self.block_start_tool(self.block_index, call_id, name));
-                                } else {
-                                    out.push_str(&self.block_start_tool(self.block_index, "toolu_unknown", "tool"));
-                                }
-                                self.current_block = Some("tool".to_string());
-                                self.block_index += 1;
-                            }
-                            if !fn_args.is_empty() {
-                                out.push_str(&self.tool_delta(self.block_index.saturating_sub(1), fn_args));
-                                self.output_tokens += (fn_args.chars().count() / 4).max(1) as u64;
-                            }
-                        }
-                    }
-
-                    // finish_reason → stop_reason
-                    if let Some(fr) = choice["finish_reason"].as_str() {
-                        if !fr.is_empty() && fr != "null" {
-                            let stop_reason = match fr {
-                                "tool_calls" => "tool_use",
-                                "length" => "max_tokens",
-                                "stop" => "end_turn",
-                                _ => "end_turn",
-                            };
-                            self.close_block(&mut out);
-                            out.push_str(&self.message_delta(stop_reason));
-                            out.push_str(&self.message_stop());
-                            self.finished = true;
-                        }
-                    }
+                // Solo righe COMPLETE: il resto resta nel buffer fino al
+                // prossimo chunk (fix taglio riga 30/09/2026).
+                while let Some(pos) = self.line_buffer.find('\n') {
+                    let line: String = self.line_buffer.drain(..=pos).collect();
+                    self.process_line(&line, &mut out, &mut consumed_stop);
                 }
 
                 if out.is_empty() && !consumed_stop {
@@ -307,17 +322,89 @@ where
                 Poll::Ready(Some(Ok(Bytes::from(out))))
             }
             Poll::Ready(None) => {
+                let mut out = String::new();
                 if !self.finished {
-                    let mut out = String::new();
-                    self.close_block(&mut out);
-                    out.push_str(&self.message_delta("end_turn"));
-                    out.push_str(&self.message_stop());
-                    self.finished = true;
-                    return Poll::Ready(Some(Ok(Bytes::from(out))));
+                    // Eventuale ultima riga arrivata senza '\n' finale.
+                    let mut consumed_stop = false;
+                    let residuo = std::mem::take(&mut self.line_buffer);
+                    if !residuo.trim().is_empty() {
+                        self.process_line(&residuo, &mut out, &mut consumed_stop);
+                    }
+                    if !self.finished {
+                        self.close_block(&mut out);
+                        out.push_str(&self.message_delta("end_turn"));
+                        out.push_str(&self.message_stop());
+                        self.finished = true;
+                    }
                 }
-                Poll::Ready(None)
+                if out.is_empty() {
+                    Poll::Ready(None)
+                } else {
+                    Poll::Ready(Some(Ok(Bytes::from(out))))
+                }
             }
             Poll::Pending => Poll::Pending,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures_util::stream;
+
+    type ByteStream =
+        futures_util::stream::Iter<std::vec::IntoIter<Result<Bytes, reqwest::Error>>>;
+
+    fn chunk_stream(parts: Vec<&str>) -> ByteStream {
+        let items: Vec<Result<Bytes, reqwest::Error>> = parts
+            .into_iter()
+            .map(|p| Ok(Bytes::from(p.to_string())))
+            .collect();
+        stream::iter(items)
+    }
+
+    /// Ricostruisce il testo emesso dai text_delta del converter.
+    async fn testo_ricostruito(inner: ByteStream) -> String {
+        let mut s = AnthropicSseStream::new(inner, "test-model".into(), "msg_test".into(), 0);
+        let mut totale = String::new();
+        while let Some(item) = s.next().await {
+            let bytes = item.expect("poll error");
+            let text = String::from_utf8_lossy(&bytes);
+            for line in text.split('\n') {
+                let l = line.trim();
+                if l.starts_with("data:") && l.contains("text_delta") {
+                    let v: serde_json::Value =
+                        serde_json::from_str(l[5..].trim()).expect("payload text_delta");
+                    totale.push_str(v["delta"]["text"].as_str().unwrap_or(""));
+                }
+            }
+        }
+        totale
+    }
+
+    #[tokio::test]
+    async fn riga_spezzata_tra_due_chunk_non_perde_testo() {
+        // Il primo chunk HTTP taglia a metà la riga data: {..."content":"Ciao
+        // e il resto arriva nel chunk successivo — il testo deve restare integro.
+        let inner = chunk_stream(vec![
+            "data: {\"id\":\"x\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n\
+             data: {\"choices\":[{\"delta\":{\"content\":\"Ciao ",
+            "Mondo\"},\"finish_reason\":null}]}\n\n\
+             data: {\"choices\":[{\"delta\":{\"content\":\"!\"},\"finish_reason\":\"stop\"}]}\n\n\
+             data: [DONE]\n\n",
+        ]);
+        let t = testo_ricostruito(inner).await;
+        assert_eq!(t, "Ciao Mondo!", "perso testo per taglio riga tra due chunk");
+    }
+
+    #[tokio::test]
+    async fn eventi_integri_restano_intatti() {
+        let inner = chunk_stream(vec![
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Primo.\"},\"finish_reason\":null}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Secondo.\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n",
+        ]);
+        let t = testo_ricostruito(inner).await;
+        assert_eq!(t, "Primo.Secondo.");
     }
 }
