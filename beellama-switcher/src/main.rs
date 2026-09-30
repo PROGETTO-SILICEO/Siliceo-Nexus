@@ -204,98 +204,60 @@ async fn handle_switch_model(
     // Attendi che la VRAM si liberi
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
-    let req_cache_k = payload.cache_k.clone().unwrap_or_else(|| {
-        let lower = model_name.to_lowercase();
-        if lower.contains("9b") || lower.contains("35b") {
-            "turbo4".to_string()
-        } else {
-            state.default_cache_k.clone()
-        }
-    });
-    let req_cache_v = payload.cache_v.clone().unwrap_or_else(|| {
-        let lower = model_name.to_lowercase();
-        if lower.contains("9b") || lower.contains("35b") {
-            "turbo3_tcq".to_string()
-        } else {
-            state.default_cache_v.clone()
-        }
-    });
+    // Cache richieste (payload) o default. Nota: turbo4 richiede un block size 128
+    // che divide n_embd_head_k del modello (es. LFM2.5 ha 64 -> incompatibile).
+    // Per questo, se il primo avvio non riesce, si ritenta con cache f16/f16.
+    let base_cache_k = payload.cache_k.clone().unwrap_or_else(|| state.default_cache_k.clone());
+    let base_cache_v = payload.cache_v.clone().unwrap_or_else(|| state.default_cache_v.clone());
     let req_flash_attn = payload.flash_attn.clone().unwrap_or_else(|| state.default_flash_attn.clone());
     let model_ctx = payload.context_size.unwrap_or_else(|| context_for_model(model_name, state.context_size));
+    let slots = payload.slots.unwrap_or(1);
 
-    info!("🚀 Avvio nuovo modello su RTX 2070 GPU: '{}' (ctx: {}, KV: {}/{}, FA: {})",
-          model_name, model_ctx, req_cache_k, req_cache_v, req_flash_attn);
+    let mut final_k = base_cache_k.clone();
+    let mut final_v = base_cache_v.clone();
+    let mut fallback_f16 = false;
 
-    let mut cmd = tokio::process::Command::new(&state.beellama_bin);
-    cmd.arg("--model")
-        .arg(&target_path)
-        .arg("--port")
-        .arg(state.internal_port.to_string())
-        .arg("--host")
-        .arg("127.0.0.1")
-        .arg("-ngl")
-        .arg("99")
-        .arg("-c")
-        .arg(model_ctx.to_string())
-        .arg("-np")
-        .arg(payload.slots.unwrap_or(1).to_string())
-        .arg("-fa")
-        .arg(&req_flash_attn);
+    let mut attempt = spawn_and_wait(
+        &state, &mut proc_lock, &target_path, model_name, model_ctx,
+        &req_flash_attn, &base_cache_k, &base_cache_v, slots, payload.draft_model.as_deref(),
+    ).await;
 
-    if !req_cache_k.is_empty() && req_cache_k != "f16" {
-        cmd.arg("-ctk").arg(&req_cache_k);
-    }
-    if !req_cache_v.is_empty() && req_cache_v != "f16" {
-        cmd.arg("-ctv").arg(&req_cache_v);
+    if attempt.is_err() && !(base_cache_k == "f16" && base_cache_v == "f16") {
+        info!("⚠️  Primo avvio non riuscito ({}): retry con cache f16/f16",
+              attempt.as_ref().err().map(|s| s.as_str()).unwrap_or("?"));
+        fallback_f16 = true;
+        final_k = "f16".to_string();
+        final_v = "f16".to_string();
+        attempt = spawn_and_wait(
+            &state, &mut proc_lock, &target_path, model_name, model_ctx,
+            &req_flash_attn, "f16", "f16", slots, payload.draft_model.as_deref(),
+        ).await;
     }
 
-    if let Some(ref draft) = payload.draft_model {
-        let draft_path = state.models_dir.join(draft);
-        if draft_path.exists() {
-            cmd.arg("-md").arg(draft_path).arg("-ngld").arg("99");
-        }
-    }
-
-    let child_res = cmd.spawn();
-
-    match child_res {
-        Ok(child) => {
-            *proc_lock = Some(child);
+    match attempt {
+        Ok(()) => {
             let mut active_lock = state.active_model.lock().await;
             *active_lock = model_name.to_string();
-
-            // Readiness check: attendi che il server interno ascolti prima di rispondere
-            let port = state.internal_port;
-            let ready = tokio::time::timeout(
-                std::time::Duration::from_secs(30),
-                wait_for_server(port),
-            )
-            .await;
-
-            match ready {
-                Ok(true) => {
-                    info!("✅ Processo beellama riavviato con successo per '{}' (server pronto, KV: {}/{})", model_name, req_cache_k, req_cache_v);
-                    Ok(Json(serde_json::json!({
-                        "status": "switched",
-                        "model": model_name,
-                        "path": target_path.to_string_lossy(),
-                        "internal_port": state.internal_port,
-                        "context_size": model_ctx,
-                        "cache_type_k": req_cache_k,
-                        "cache_type_v": req_cache_v,
-                        "flash_attn": req_flash_attn
-                    })))
-                }
-                Ok(false) => Err((StatusCode::GATEWAY_TIMEOUT, "Modello avviato ma server non pronto in tempo".to_string())),
-                Err(_) => Err((StatusCode::GATEWAY_TIMEOUT, "Timeout attesa server modello".to_string())),
-            }
+            info!("✅ Server pronto per '{}' (KV: {}/{}{})", model_name, final_k, final_v,
+                  if fallback_f16 { ", fallback f16" } else { "" });
+            Ok(Json(serde_json::json!({
+                "status": "switched",
+                "model": model_name,
+                "path": target_path.to_string_lossy(),
+                "internal_port": state.internal_port,
+                "context_size": model_ctx,
+                "cache_type_k": final_k,
+                "cache_type_v": final_v,
+                "flash_attn": req_flash_attn,
+                "fallback_f16": fallback_f16
+            })))
         }
-        Err(e) => {
-            error!("❌ Errore nell'avvio di beellama: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Impossibile avviare beellama binary '{}': {}", state.beellama_bin, e),
-            ))
+        Err(why) => {
+            error!("❌ Avvio fallito per '{}': {}", model_name, why);
+            Err((StatusCode::BAD_GATEWAY, format!(
+                "Avvio modello fallito: {}. Log server: {}",
+                why, server_log_path(state.internal_port).display()
+            )))
         }
     }
 }
@@ -337,7 +299,6 @@ async fn handle_proxy_chat(
     Ok(response)
 }
 
-/// Attende che il server interno ascolti sulla porta data (readiness check).
 /// Context per modello. gemma-4-E4B supporta 64k; qwen2.5-coder 32k;
 /// gli altri (Qwen 3.5 4B/9B/35B, wizard) restano al default della config.
 /// Un context troppo alto su 8GB VRAM impedisce il load (KV cache).
@@ -352,13 +313,90 @@ fn context_for_model(model_name: &str, default_ctx: u32) -> u32 {
     }
 }
 
-async fn wait_for_server(port: u16) -> bool {
-    for _ in 0..60 {
-        if let Ok(stream) = tokio::net::TcpStream::connect(("127.0.0.1", port)).await {
-            drop(stream);
-            return true;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+/// Nome del file di log del server interno (stdout+stderr del llama-server).
+fn server_log_path(port: u16) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("beellama-server-{}.log", port))
+}
+
+/// Avvia llama-server e attende che ascolti. Se il processo muore durante
+/// l'attesa lo "reapa" subito (niente zombie) e ritorna il motivo dell'errore.
+#[allow(clippy::too_many_arguments)]
+async fn spawn_and_wait(
+    state: &AppState,
+    proc_lock: &mut tokio::sync::MutexGuard<'_, Option<tokio::process::Child>>,
+    target_path: &std::path::Path,
+    model_name: &str,
+    model_ctx: u32,
+    flash_attn: &str,
+    cache_k: &str,
+    cache_v: &str,
+    slots: u32,
+    draft_model: Option<&str>,
+) -> Result<(), String> {
+    info!("🚀 Avvio '{}' (ctx: {}, KV: {}/{}, FA: {}, slots: {})",
+          model_name, model_ctx, cache_k, cache_v, flash_attn, slots);
+
+    // stdout/stderr del server su file: senza questo il motivo dei crash va perso.
+    let log_path = server_log_path(state.internal_port);
+    let log_file = std::fs::OpenOptions::new().create(true).append(true).open(&log_path)
+        .map_err(|e| format!("log non apribile ({}): {}", log_path.display(), e))?;
+    let log_file2 = log_file.try_clone().map_err(|e| format!("log non duplicabile: {}", e))?;
+
+    let mut cmd = tokio::process::Command::new(&state.beellama_bin);
+    cmd.arg("--model").arg(target_path)
+        .arg("--port").arg(state.internal_port.to_string())
+        .arg("--host").arg("127.0.0.1")
+        .arg("-ngl").arg("99")
+        .arg("-c").arg(model_ctx.to_string())
+        .arg("-np").arg(slots.to_string())
+        .arg("-fa").arg(flash_attn)
+        .stdout(std::process::Stdio::from(log_file))
+        .stderr(std::process::Stdio::from(log_file2));
+
+    if !cache_k.is_empty() && cache_k != "f16" {
+        cmd.arg("-ctk").arg(cache_k);
     }
-    false
+    if !cache_v.is_empty() && cache_v != "f16" {
+        cmd.arg("-ctv").arg(cache_v);
+    }
+
+    if let Some(draft) = draft_model {
+        let draft_path = state.models_dir.join(draft);
+        if draft_path.exists() {
+            cmd.arg("-md").arg(draft_path).arg("-ngld").arg("99");
+        }
+    }
+
+    let mut child = cmd.spawn().map_err(|e| format!("spawn fallito: {}", e))?;
+
+    // Attesa con sorveglianza: pronto (health HTTP ok) O morto (reap, niente zombie).
+    // NB: la porta TCP si apre PRIMA del load del modello: un check solo-TCP darebbe
+    // falsi positivi (load fallito ma processo vivo e porta aperta -> "Loading model").
+    let health_url = format!("http://127.0.0.1:{}/health", state.internal_port);
+    for _ in 0..80 {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                return Err(format!("server terminato all'avvio ({}); vedi {}",
+                                   status, log_path.display()));
+            }
+            Ok(None) => {}
+            Err(e) => return Err(format!("try_wait: {}", e)),
+        }
+        if let Ok(resp) = state.client.get(&health_url).timeout(Duration::from_secs(2)).send().await {
+            if resp.status().is_success() {
+                if let Ok(body) = resp.text().await {
+                    if body.contains("ok") {
+                        **proc_lock = Some(child);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+    Err(format!("timeout: porta {} non pronta in 40s; vedi {}",
+                state.internal_port, log_path.display()))
 }
