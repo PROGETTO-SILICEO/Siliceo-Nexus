@@ -441,6 +441,24 @@ async fn handle_chat_completions(
     // (beellama 4096, groq TPM 8000) facendo bruciare la cascata in fallimenti.
     // RTK Context Hygiene: pulizia ANSI escape codes e dedup righe rumorose
     let mut messages = request.messages;
+    // ANCORAGGIO LINGUA (19/10/2026, mandato Alfonso): i modelli free a volte
+    // svariano di lingua (agnes-2.5-flash ha risposto in RUSSO a un input
+    // italiano). Un promemoria di sistema NEUTRO ancora la risposta alla lingua
+    // dell'utente: non forza l'italiano (chi scrive in inglese resta in
+    // inglese), ma impedisce le derive.
+    let ha_regola_lingua = messages.iter().any(|m| {
+        m.role == "system" && {
+            let l = m.content.to_lowercase();
+            l.contains("lingua") || l.contains("language")
+        }
+    });
+    if !ha_regola_lingua {
+        messages.insert(0, crate::types::Message {
+            role: "system".to_string(),
+            content: "Rispondi sempre nella stessa lingua del messaggio dell'utente: se l'utente scrive in italiano, rispondi in italiano (mai in un'altra lingua).".to_string(),
+            ..Default::default()
+        });
+    }
     let _ = rtk::sanitize_messages(&mut messages);
     let request = LLMRequest {
         messages: trim_context(messages, 24_000),
