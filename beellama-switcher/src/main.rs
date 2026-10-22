@@ -17,6 +17,13 @@ use tracing::{error, info};
 pub struct AppState {
     pub models_dir: PathBuf,
     pub beellama_bin: String,
+    /// Il motore sovrano (siliceo-infer-core): per i modelli che non entrano
+    /// nella VRAM, lo streamma dagli esperti su host con la L1 in VRAM.
+    /// Stesso contratto HTTP di llama-server: e' un engine come un altro.
+    pub siliceo_bin: String,
+    /// Se il nome del modello contiene questa stringa, si lancia il motore
+    /// sovrano invece di llama-server.
+    pub siliceo_match: String,
     pub internal_port: u16,
     pub context_size: u32,
     pub default_cache_k: String,
@@ -62,6 +69,10 @@ async fn main() -> anyhow::Result<()> {
 
     let beellama_bin = std::env::var("BEELLAMA_BIN")
         .unwrap_or_else(|_| "/home/alforiva/inference/beellama_src/build/bin/llama-server".to_string());
+    let siliceo_bin = std::env::var("SILICEO_ENGINE_BIN")
+        .unwrap_or_else(|_| "/home/alforiva/siliceo-infer-core/target/release/siliceo_server".to_string());
+    let siliceo_match = std::env::var("SILICEO_ENGINE_MATCH")
+        .unwrap_or_else(|_| "35B-A3B".to_string());
     let internal_port = std::env::var("BEELLAMA_PORT")
         .unwrap_or_else(|_| "8081".to_string())
         .parse::<u16>()
@@ -81,6 +92,8 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState {
         models_dir,
         beellama_bin,
+        siliceo_bin,
+        siliceo_match,
         internal_port,
         context_size,
         default_cache_k,
@@ -199,6 +212,12 @@ async fn handle_switch_model(
     let _ = tokio::process::Command::new("pkill")
         .arg("-f")
         .arg(format!("llama-server.*--port {}", port))
+        .status()
+        .await;
+    // Anche il motore sovrano, se era in esercizio sulla porta interna.
+    let _ = tokio::process::Command::new("pkill")
+        .arg("-f")
+        .arg(format!("siliceo_server.*--port {}", port))
         .status()
         .await;
     // Attendi che la VRAM si liberi
@@ -342,7 +361,28 @@ async fn spawn_and_wait(
         .map_err(|e| format!("log non apribile ({}): {}", log_path.display(), e))?;
     let log_file2 = log_file.try_clone().map_err(|e| format!("log non duplicabile: {}", e))?;
 
-    let mut cmd = tokio::process::Command::new(&state.beellama_bin);
+    // Il motore sovrano prende il posto di llama-server per i modelli che
+    // non entrano nella VRAM: e' un engine come un altro, stesso contratto.
+    let usa_motore = !state.siliceo_match.is_empty()
+        && model_name.contains(&state.siliceo_match)
+        && std::path::Path::new(&state.siliceo_bin).exists();
+
+    let mut cmd = if usa_motore {
+        info!("🧠 Modello '{}': avvio il MOTORE SOVRANO ({})", model_name, state.siliceo_bin);
+        let mut c = tokio::process::Command::new(&state.siliceo_bin);
+        c.arg("--model").arg(target_path)
+            .arg("--port").arg(state.internal_port.to_string())
+            .arg("--host").arg("127.0.0.1")
+            .arg("--model-id").arg(model_name)
+            .arg("--l1-slots")
+            .arg(std::env::var("SILICEO_L1_SLOTS").unwrap_or_else(|_| "2750".to_string()))
+            .arg("--max-seq")
+            .arg(std::env::var("SILICEO_MAX_SEQ").unwrap_or_else(|_| "4096".to_string()));
+        c
+    } else {
+        tokio::process::Command::new(&state.beellama_bin)
+    };
+    if !usa_motore {
     cmd.arg("--model").arg(target_path)
         .arg("--port").arg(state.internal_port.to_string())
         .arg("--host").arg("127.0.0.1")
@@ -365,6 +405,7 @@ async fn spawn_and_wait(
         if draft_path.exists() {
             cmd.arg("-md").arg(draft_path).arg("-ngld").arg("99");
         }
+    }
     }
 
     let mut child = cmd.spawn().map_err(|e| format!("spawn fallito: {}", e))?;
