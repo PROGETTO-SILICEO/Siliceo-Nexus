@@ -112,6 +112,10 @@ pub async fn stream_openai_compatible(
         "stream": true,
     });
 
+    if let Some(ref kwargs) = request.chat_template_kwargs {
+        body["chat_template_kwargs"] = kwargs.clone();
+    }
+
     if let Some(ref stop) = request.stop {
         if !stop.is_empty() {
             body["stop"] = serde_json::json!(stop);
@@ -284,6 +288,10 @@ async fn try_openai_compatible(
         "max_tokens": request.max_tokens.unwrap_or(4096),
         "temperature": request.temperature.unwrap_or(0.7),
     });
+
+    if let Some(ref kwargs) = request.chat_template_kwargs {
+        body["chat_template_kwargs"] = kwargs.clone();
+    }
 
     if !system_prompt.is_empty() {
         let sys_msg = serde_json::json!({"role": "system", "content": system_prompt.trim()});
