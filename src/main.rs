@@ -851,6 +851,7 @@ async fn handle_anthropic_messages(
         stream: anthropic_req.stream,
         tools: anthropic_req.tools.clone(),
         stop: anthropic_req.stop_sequences.clone(),
+        chat_template_kwargs: None,
     };
 
     // --- Rizzo PII per Anthropic ---
@@ -1659,6 +1660,7 @@ async fn handle_test_provider(
         tools: None,
         stream: None,
         stop: None,
+        chat_template_kwargs: None,
     };
 
     let start = std::time::Instant::now();
