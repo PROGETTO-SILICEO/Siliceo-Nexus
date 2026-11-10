@@ -1,0 +1,187 @@
+openapi: 3.1.0
+info:
+  title: Siliceo Node Agent
+  version: 0.1.0
+  description: >
+    Contratto del data plane sul nodo GPU. Nexus è l'unico client.
+    L'agente gestisce lease esclusivi, start/stop dei servizi e proxy.
+servers:
+  - url: http://100.98.20.76:8080
+    description: Nodo 2070 (non esposto ai client pubblici)
+paths:
+  /health:
+    get:
+      summary: Stato sintetico del nodo
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/services:
+    get:
+      summary: Catalogo servizi e stato GPU
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Services"
+  /v1/lease:
+    post:
+      summary: Acquisisce un lease esclusivo sulla GPU
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaseRequest"
+      responses:
+        "200":
+          description: Lease acquisito
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lease"
+        "409":
+          description: VRAM occupata da un processo non registrato
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conflict"
+  /v1/release:
+    post:
+      summary: Rilascia il lease
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lease_id]
+              properties:
+                lease_id: {type: string}
+      responses:
+        "200":
+          description: Rilasciato
+  /v1/switch_model:
+    post:
+      summary: Compatibilità con lo switcher attuale
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model]
+              properties:
+                model: {type: string}
+                cache_k: {type: string}
+                cache_v: {type: string}
+                context_size: {type: integer}
+                slots: {type: integer}
+      responses:
+        "200":
+          description: Modello caricato
+  /v1/chat/completions:
+    post:
+      summary: Proxy OpenAI chat verso llama-server
+      responses:
+        "200":
+          description: Risposta OpenAI-compatible
+  /v1/images/generations:
+    post:
+      summary: Proxy verso ComfyUI
+      responses:
+        "200":
+          description: Immagine generata
+  /v1/audio/speech:
+    post:
+      summary: Proxy TTS
+      responses:
+        "200":
+          description: Audio
+          content:
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+  /v1/audio/transcriptions:
+    post:
+      summary: Proxy STT
+      responses:
+        "200":
+          description: Trascrizione
+components:
+  schemas:
+    Health:
+      type: object
+      properties:
+        status: {type: string, enum: [ok, degraded]}
+        active: {type: [string, "null"]}
+        active_model: {type: [string, "null"]}
+        lease_id: {type: [string, "null"]}
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+    Gpu:
+      type: object
+      properties:
+        name: {type: string}
+        total_mb: {type: integer}
+        used_mb: {type: integer}
+        free_mb: {type: integer}
+    Service:
+      type: object
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [llm, image, voice, stt]}
+        name: {type: string}
+        port: {type: integer}
+        running: {type: boolean}
+        models:
+          type: array
+          items: {type: string}
+        vram_mb: {type: integer}
+    Services:
+      type: object
+      properties:
+        node: {type: string}
+        gpu:
+          $ref: "#/components/schemas/Gpu"
+        active: {type: [string, "null"]}
+        lease_id: {type: [string, "null"]}
+        services:
+          type: array
+          items:
+            $ref: "#/components/schemas/Service"
+    LeaseRequest:
+      type: object
+      required: [service]
+      properties:
+        service: {type: string}
+        model: {type: string}
+        ttl_s: {type: integer, default: 600}
+        force: {type: boolean, default: false}
+    Lease:
+      type: object
+      properties:
+        ok: {type: boolean}
+        lease_id: {type: string}
+        service: {type: string}
+        model: {type: string}
+        endpoint: {type: string}
+        expires_at: {type: string}
+        switched: {type: boolean}
+    Conflict:
+      type: object
+      properties:
+        ok: {type: boolean, enum: [false]}
+        error: {type: string, enum: [vram_conflict]}
+        holder:
+          type: object
+          properties:
+            pid: {type: integer}
+            name: {type: string}
+            mem_mb: {type: integer}
