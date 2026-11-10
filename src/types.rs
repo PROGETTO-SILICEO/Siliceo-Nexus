@@ -59,6 +59,9 @@ pub struct LLMRequest {
     pub stream: Option<bool>,
     pub tools: Option<serde_json::Value>,
     pub stop: Option<Vec<String>>,
+    /// Opzioni del chat template (es. {"enable_thinking": false} per Qwen3.5).
+    #[serde(default)]
+    pub chat_template_kwargs: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
