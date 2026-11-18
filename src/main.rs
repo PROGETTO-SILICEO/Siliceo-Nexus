@@ -8,7 +8,7 @@ use axum::{
 use reqwest::{redirect::Policy, Url};
 use std::collections::VecDeque;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{info, warn, error};
 
@@ -410,13 +410,15 @@ async fn handle_api_hello() -> impl IntoResponse {
 async fn handle_count_tokens(
     headers: HeaderMap,
     request: axum::extract::Request,
-) -> impl IntoResponse {
-    verify_api_auth(&headers).ok();
+) -> axum::response::Response {
+    if let Err((code, msg)) = verify_api_auth(&headers) {
+        return (code, msg).into_response();
+    }
     let method = request.method().to_string();
     let path = request.uri().path().to_string();
     let bytes = match axum::body::to_bytes(request.into_body(), 10 * 1024 * 1024).await {
         Ok(b) => b,
-        Err(_) => return Json(serde_json::json!({"input_tokens": 0})),
+        Err(_) => return Json(serde_json::json!({"input_tokens": 0})).into_response(),
     };
     let text = String::from_utf8_lossy(&bytes);
     let input_tokens = (text.chars().count() / 4).max(1) as u64;
@@ -424,7 +426,7 @@ async fn handle_count_tokens(
     Json(serde_json::json!({
         "input_tokens": input_tokens,
         "output_tokens": 0
-    }))
+    })).into_response()
 }
 
 async fn handle_chat_completions(
@@ -1222,35 +1224,23 @@ fn same_endpoint_origin(left: &str, right: &str) -> bool {
     }
 }
 
+fn admin_allowed_ips() -> &'static Vec<IpAddr> {
+    static ADMIN_ALLOWED: OnceLock<Vec<IpAddr>> = OnceLock::new();
+    ADMIN_ALLOWED.get_or_init(|| {
+        let raw = std::env::var("NEXUS_ADMIN_ALLOWED_IPS")
+            .unwrap_or_else(|_| "127.0.0.1,100.79.151.73,100.98.20.76".to_string());
+        raw.split(',').filter_map(|s| s.trim().parse().ok()).collect()
+    })
+}
+
 fn is_trusted_ip(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(v4) => {
-            let o = v4.octets();
-            if o[0] == 100 && (64..=127).contains(&o[1]) {
-                return true;
-            }
-            if o[0] == 127 {
-                return true;
-            }
-            if o[0] == 10 {
-                return true;
-            }
-            if o[0] == 192 && o[1] == 168 {
-                return true;
-            }
-            if o[0] == 172 && (16..=31).contains(&o[1]) {
-                return true;
-            }
-            false
-        }
-        IpAddr::V6(v6) => v6.is_loopback(),
-    }
+    admin_allowed_ips().iter().any(|allowed| *allowed == ip)
 }
 
 fn verify_token(headers: &HeaderMap, env_name: &str, label: &str) -> Result<(), (StatusCode, String)> {
     let required_token = match std::env::var(env_name) {
         Ok(t) if !t.trim().is_empty() => t,
-        _ => return Ok(()),
+        _ => return Err((StatusCode::SERVICE_UNAVAILABLE, format!("{} non configurato", env_name))),
     };
 
     let auth_header = headers.get("Authorization")
@@ -1268,13 +1258,7 @@ fn verify_token(headers: &HeaderMap, env_name: &str, label: &str) -> Result<(), 
     let is_valid = auth_header == format!("Bearer {}", required_token)
         || auth_header == required_token
         || x_api_key == required_token
-        || api_key_header == required_token
-        || (env_name == "NEXUS_API_TOKEN" && (
-            x_api_key == "nexus-local"
-            || auth_header == "Bearer nexus-local"
-            || auth_header == "nexus-local"
-            || api_key_header == "nexus-local"
-        ));
+        || api_key_header == required_token;
 
     if is_valid {
         Ok(())
@@ -1331,16 +1315,12 @@ fn is_loopback_bind(addr: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn ensure_network_auth_is_configured(addr: &str) -> anyhow::Result<()> {
-    if is_loopback_bind(addr) {
-        return Ok(());
-    }
-
+fn ensure_network_auth_is_configured(_addr: &str) -> anyhow::Result<()> {
     for name in ["NEXUS_API_TOKEN", "NEXUS_ADMIN_TOKEN"] {
         if std::env::var(name).map(|value| !value.trim().is_empty()).unwrap_or(false) {
             continue;
         }
-        anyhow::bail!("{} is required when NEXUS_ADDR is not a loopback address", name);
+        anyhow::bail!("{} is required: Nexus non parte senza token", name);
     }
     Ok(())
 }
