@@ -230,6 +230,23 @@ async fn handle_switch_model(
     let base_cache_v = payload.cache_v.clone().unwrap_or_else(|| state.default_cache_v.clone());
     let req_flash_attn = payload.flash_attn.clone().unwrap_or_else(|| state.default_flash_attn.clone());
     let model_ctx = payload.context_size.unwrap_or_else(|| context_for_model(model_name, state.context_size));
+    // Motore sovrano: il limite VERO e' SILICEO_MAX_SEQ (spawn_and_wait lo
+    // passa come --max-seq e ignora model_ctx). Se dichiariamo un numero piu'
+    // alto, il client che si fida manda prompt che il motore rifiuta (o peggio:
+    // prima del fix del 18/11/2026 li accettava e si avvelenava per giorni).
+    // Stessa condizione di spawn_and_wait: se parte il motore, dichiara il
+    // suo limite reale.
+    let usa_motore = !state.siliceo_match.is_empty()
+        && model_name.contains(&state.siliceo_match)
+        && std::path::Path::new(&state.siliceo_bin).exists();
+    let declared_ctx = if usa_motore {
+        std::env::var("SILICEO_MAX_SEQ")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(4096)
+    } else {
+        model_ctx
+    };
     let slots = payload.slots.unwrap_or(1);
 
     let mut final_k = base_cache_k.clone();
@@ -264,7 +281,7 @@ async fn handle_switch_model(
                 "model": model_name,
                 "path": target_path.to_string_lossy(),
                 "internal_port": state.internal_port,
-                "context_size": model_ctx,
+                "context_size": declared_ctx,
                 "cache_type_k": final_k,
                 "cache_type_v": final_v,
                 "flash_attn": req_flash_attn,
