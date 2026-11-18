@@ -47,6 +47,19 @@ fn normalize_tools(tools: &serde_json::Value) -> Option<serde_json::Value> {
     }
 }
 
+
+
+/// Tetto di output per provider: alcuni provider free (Groq) rifiutano
+/// max_tokens > 16384 con HTTP 400. Il router deve clampare, non fallire.
+fn clamp_max_tokens(provider: &Provider, requested: Option<u32>) -> u32 {
+    let base = requested.unwrap_or(4096);
+    match provider.name.as_str() {
+        "groq-free-pool" | "groq" => base.min(16384),
+        "agnes-ai-singapore" | "agnes" => base.min(65536),
+        _ => base,
+    }
+}
+
 pub async fn dispatch_request(
     client: &reqwest::Client,
     provider: &Provider,
@@ -107,7 +120,7 @@ pub async fn stream_openai_compatible(
     let mut body = serde_json::json!({
         "model": target_model,
         "messages": messages,
-        "max_tokens": request.max_tokens.unwrap_or(4096),
+        "max_tokens": clamp_max_tokens(provider, request.max_tokens),
         "temperature": request.temperature.unwrap_or(0.7),
         "stream": true,
     });
@@ -285,7 +298,7 @@ async fn try_openai_compatible(
     let mut body = serde_json::json!({
         "model": target_model,
         "messages": messages,
-        "max_tokens": request.max_tokens.unwrap_or(4096),
+        "max_tokens": clamp_max_tokens(provider, request.max_tokens),
         "temperature": request.temperature.unwrap_or(0.7),
     });
 
@@ -456,7 +469,7 @@ async fn try_gemini_native(
     let body = serde_json::json!({
         "model": request.model.as_deref().unwrap_or(&provider.model),
         "messages": clean_messages,
-        "max_tokens": request.max_tokens.unwrap_or(4096),
+        "max_tokens": clamp_max_tokens(provider, request.max_tokens),
         "temperature": request.temperature.unwrap_or(0.7),
     });
 
@@ -530,7 +543,7 @@ async fn try_anthropic(
 
     let mut body = serde_json::json!({
         "model": request.model.as_deref().unwrap_or(&provider.model),
-        "max_tokens": request.max_tokens.unwrap_or(4096),
+        "max_tokens": clamp_max_tokens(provider, request.max_tokens),
         "messages": messages,
     });
 
